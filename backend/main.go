@@ -1,14 +1,19 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"net/http"
+
+	"SPOTCIN/backend/routes"
 )
 
-// HTTP básico para testar o servidor
 func main() {
-    http.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
-        fmt.Fprintf(w, `{"status":"ok"}`)
-    })
-    http.ListenAndServe(":8080", nil)
+	mux := routes.Setup()
+
+	// middlewares globais aplicados aqui, se quiser
+	addr := ":8080"
+	log.Printf("Servidor rodando em http://localhost%s", addr)
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		log.Fatal(err)
+	}
 }
