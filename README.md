@@ -1,7 +1,7 @@
 # SPOTCIN (Equipe 3)
 
 ## Descrição do Projeto
-SPOTCIN é um sistema distribuído de streaming de áudio MP3/WAV que utiliza HTTP Streaming.
+SPOTCIN é um sistema distribuído de streaming de áudio MP3/WAV que utiliza HTTP Streaming. A aplicação conta com um catálogo de áudios, onde é possível escolher um áudio e iniciar, pausar ou avançar até determinado momento.
 
 ## Como Rodar
 Clone o projeto:
@@ -21,7 +21,7 @@ cd backend
 ```
 - Inicialize com:
 ```
-go run .
+go run ./cmd/server
 ```
 
 Para iniciar a aplicação na visão do cliente:
@@ -36,6 +36,76 @@ npm install
 - Inicialize com:
 ```
 npm run dev
+```
+
+## Entrega 1
+Neste início de período de desenvolvimento, os dados são armazenados somente em um banco SQLite local. 
+
+Para conferir a realização das tarefas da Entrega 1, inicie o servidor e, em outro terminal, execute os comandos abaixo.
+
+### Para realizar o health-check:
+```bash
+curl -i http://localhost:8080/health
+```
+A saída esperada é `{"status":"ok"}`.
+
+### Para conferir a rota de catálogo:
+```bash
+curl -s http://localhost:8080/api/songs | python -m json.tool 
+```
+Exemplo de saída esperada:
+```bash
+[
+    {
+        "id": "0d36235f-93d1-47c1-81eb-e244f502bfc2",
+        "path": "kokiri_forest.wav",
+        "title": "Kokiri Forest",
+        "artist": "Unknown",
+        "size": 10769278,
+        "mod_time": "2026-11-17T16:33:09.270541-03:00",
+        "mime_type": "audio/wav",
+        "created_at": "2026-11-17T19:45:15.9978222-03:00"
+    }
+]
+```
+
+### Para conferir o streaming com Range (Resposta 206 + Content-Range):
+```bash
+curl -i -H "Range: bytes=0-1023" http://localhost:8080/api/stream/<ID>
+```
+Exemplo de saída esperada:
+```bash
+HTTP/1.1 206 Partial Content
+Accept-Ranges: bytes
+Access-Control-Allow-Headers: Content-Type, Authorization, Range
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Access-Control-Expose-Headers: Content-Range, Accept-Ranges, Content-Length
+Content-Length: 1024
+Content-Range: bytes 0-1023/10769278
+Content-Type: audio/wav
+Last-Modified: Tue, 17 Nov 2026 19:33:09 GMT
+Date: Tue, 17 Nov 2026 22:49:48 GMT
+```
+
+### Para testar um Range inválido (Resposta 416):
+```bash
+curl -i -H "Range: bytes=999999999-" http://localhost:8080/api/stream/<ID>
+```
+Exemplo de saída esperada:
+```bash
+HTTP/1.1 416 Requested Range Not Satisfiable
+Access-Control-Allow-Headers: Content-Type, Authorization, Range
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
+Access-Control-Allow-Origin: *
+Access-Control-Expose-Headers: Content-Range, Accept-Ranges, Content-Length
+Content-Range: bytes */10769278
+Content-Type: text/plain; charset=utf-8
+X-Content-Type-Options: nosniff
+Date: Tue, 17 Nov 2026 22:50:48 GMT
+Content-Length: 33
+
+invalid range: failed to overlap
 ```
 
 ## Framework de Streaming
@@ -103,6 +173,23 @@ SPOTCIN/
 │       └── nginx.conf           # Configuração do Nginx
 ├── .gitignore
 └── README.md
+```
+
+## Estrutura do Projeto
+```text
+                    ┌──────────────┐
+  Browser (React) ─>│ Load Balancer│  (Nginx)
+                    └──────┬───────┘
+              ┌────────────┼────────────┐
+              v            v            v
+         ┌────────┐   ┌────────┐   ┌────────┐
+         │ Go API │   │ Go API │   │ Go API │ <- stateless, N réplicas
+         └───┬────┘   └───┬────┘   └───┬────┘
+             │            │            │
+     ┌───────┼────────────┼────────────┼───────┐
+     v       v            v            v       v
+   Redis    PostgreSQL    Object Storage (MinIO)   
+ (posição)  (metadados)     (binários de áudio)
 ```
 
 ## Estrutura de Dados e Catálogo
