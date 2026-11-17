@@ -4,15 +4,24 @@ import (
 	"log"
 	"net/http"
 
+	"SPOTCIN/backend/database"
 	"SPOTCIN/backend/routes"
+	"SPOTCIN/backend/services"
 )
 
 func main() {
-	mux := routes.Setup()
+	db, err := database.Open()
+	if err != nil {
+		log.Fatalf("abrindo DB: %v", err)
+	}
+
+	if err := services.ScanDatabase(db); err != nil {
+		log.Printf("scan inicial falhou: %v", err)
+	}
 
 	addr := ":8080"
 	log.Printf("Servidor rodando em http://localhost%s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, routes.Setup(db)); err != nil {
 		log.Fatal(err)
 	}
 }
