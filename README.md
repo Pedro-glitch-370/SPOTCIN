@@ -1,63 +1,123 @@
 # SPOTCIN (Equipe 3)
 
 ## Descrição do Projeto
-SPOTCIN é um sistema distribuído de streaming de áudio MP3/WAV que utiliza HTTP Streaming. A aplicação conta com um catálogo de áudios, onde é possível escolher um áudio e iniciar, pausar ou avançar até determinado momento.
+SPOTCIN é um sistema distribuído de streaming de áudio MP3/WAV que utiliza HTTP Streaming com requisições Range. A aplicação conta com um catálogo de áudios, onde é possível escolher um áudio e iniciar, pausar ou avançar até determinado momento.
 
 ## Como Rodar
-Clone o projeto:
+
+### Pré-requisitos
+- [Go](https://go.dev/dl/) 1.27.4 ou superior
+- [Docker](https://docs.docker.com/get-docker/) com Docker Compose
+- [Node.js](https://nodejs.org/) 20 ou superior (apenas para o frontend)
+
+### 1. Clonar o projeto
 ```bash
-  git clone https://github.com/Pedro-glitch-370/SPOTCIN.git
+git clone https://github.com/Pedro-glitch-370/SPOTCIN.git
+cd SPOTCIN
 ```
 
-Acesse o diretório do projeto:
+### 2. Configurar as variáveis de ambiente
+O backend lê o arquivo `backend/.env` ao iniciar. Crie-o a partir do modelo em `deploy/`:
+
+Windows (PowerShell):
+```powershell
+copy deploy\.env.example backend\.env
+```
+Linux/macOS:
 ```bash
-  cd SPOTCIN
+cp deploy/.env.example backend/.env
 ```
 
-Para iniciar o servidor:
-- Entre na pasta /backend:
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `DATABASE_URL` | — (obrigatória) | Conexão com o PostgreSQL |
+| `REDIS_ADDR` | `localhost:6379` | Endereço do Redis |
+| `GARAGE_ENDPOINT` | `localhost:3900` | Endpoint S3 do Garage |
+| `GARAGE_ACCESS_KEY` | `minioadmin` | Chave de acesso do Garage |
+| `GARAGE_SECRET_KEY` | `minioadminminioadmin` | Chave secreta do Garage |
+| `GARAGE_BUCKET` | `spotcin-audio` | Bucket dos áudios |
+| `AUDIO_DIR` | `devseed/audio` | Pasta local de onde os áudios são lidos |
+
+### 3. Subir a infraestrutura (PostgreSQL, Redis e Garage)
+```bash
+cd deploy
+docker compose up -d
+cd ..
 ```
+
+### 4. Iniciar o servidor (porta 8080)
+```bash
 cd backend
-```
-- Inicialize com:
-```
 go run ./cmd/server
 ```
+Ao iniciar, o servidor conecta ao PostgreSQL, ao Redis e ao Garage, e indexa os áudios de `devseed/audio` no banco. Se alguma das dependências estiver fora do ar, o servidor encerra com erro.
 
-Para iniciar a aplicação na visão do cliente:
-- Entre na pasta /frontend:
-```
+### 5. Iniciar o frontend (porta 5173)
+Em outro terminal, a partir da raiz do projeto:
+```bash
 cd frontend
-```
-- Instale as dependências:
-```
 npm install
-```
-- Inicialize com:
-```
 npm run dev
 ```
+O Vite redireciona as chamadas `/api` para `http://localhost:8080`.
 
 ## Entrega 1
-Neste início de período de desenvolvimento, os dados são armazenados somente em um banco SQLite local. 
+Nesta fase, os metadados do catálogo ficam no **PostgreSQL**, e o Redis e o Garage já estão conectados (verificados no health-check). Os arquivos de áudio ainda são lidos da pasta local `backend/devseed/audio`; a migração deles para o bucket do Garage está planejada.
 
 Para conferir a realização das tarefas da Entrega 1, inicie o servidor e, em outro terminal, execute os comandos abaixo.
 
-### Para realizar o health-check:
+> **Windows:** no PowerShell, `curl` é um apelido para outro comando; use `curl.exe`, como nos exemplos. O Python é chamado de `python` no Windows e de `python3` no Linux.
+
+### Health-check
+Confirmar que o processo está vivo:
+
+Windows (PowerShell):
+```powershell
+curl.exe -i http://localhost:8080/health
+```
+Linux/macOS:
 ```bash
 curl -i http://localhost:8080/health
 ```
 A saída esperada é `{"status":"ok"}`.
 
-### Para conferir a rota de catálogo:
+Confirmar as dependências:
+
+Windows (PowerShell):
+```powershell
+curl.exe -s http://localhost:8080/health/ready | python -m json.tool
+```
+Linux/macOS:
 ```bash
-curl -s http://localhost:8080/api/songs | python -m json.tool 
+curl -s http://localhost:8080/health/ready | python3 -m json.tool
+```
+Saída esperada:
+```json
+{
+    "status": "ok",
+    "checks": {
+        "garage": "ok",
+        "postgres": "ok",
+        "redis": "ok"
+    }
+}
+```
+Se alguma dependência falhar, a resposta é `503 Service Unavailable` com `"status": "degraded"` e o erro no campo correspondente.
+
+### Catálogo
+Windows (PowerShell):
+```powershell
+curl.exe -s http://localhost:8080/api/songs | python -m json.tool
+```
+Linux/macOS:
+```bash
+curl -s http://localhost:8080/api/songs | python3 -m json.tool
 ```
 Exemplo de saída esperada:
-```bash
+```json
 [
     {
-        "id": "0d36235f-93d1-47c1-81eb-e244f502bfc2",
+        "id": "708ef970-d1aa-4c48-bd31-efe81facb5a6",
         "path": "kokiri_forest.wav",
         "title": "Kokiri Forest",
         "artist": "Unknown",
@@ -69,12 +129,19 @@ Exemplo de saída esperada:
 ]
 ```
 
-### Para conferir o streaming com Range (Resposta 206 + Content-Range):
+### Streaming com Range (resposta 206 + Content-Range)
+Substitua `<ID>` por um `id` retornado pelo catálogo:
+
+Windows (PowerShell):
+```powershell
+curl.exe -i -H "Range: bytes=0-1023" http://localhost:8080/api/stream/<ID>
+```
+Linux/macOS:
 ```bash
 curl -i -H "Range: bytes=0-1023" http://localhost:8080/api/stream/<ID>
 ```
 Exemplo de saída esperada:
-```bash
+```text
 HTTP/1.1 206 Partial Content
 Accept-Ranges: bytes
 Access-Control-Allow-Headers: Content-Type, Authorization, Range
@@ -88,12 +155,17 @@ Last-Modified: Tue, 17 Nov 2026 19:33:09 GMT
 Date: Tue, 17 Nov 2026 22:49:48 GMT
 ```
 
-### Para testar um Range inválido (Resposta 416):
+### Range inválido (resposta 416)
+Windows (PowerShell):
+```powershell
+curl.exe -i -H "Range: bytes=999999999-" http://localhost:8080/api/stream/<ID>
+```
+Linux/macOS:
 ```bash
 curl -i -H "Range: bytes=999999999-" http://localhost:8080/api/stream/<ID>
 ```
 Exemplo de saída esperada:
-```bash
+```text
 HTTP/1.1 416 Requested Range Not Satisfiable
 Access-Control-Allow-Headers: Content-Type, Authorization, Range
 Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
@@ -111,401 +183,244 @@ invalid range: failed to overlap
 ## Framework de Streaming
 Foram consideradas duas opções sugeridas: HTTP Streaming e WebSockets.
 
-A preferência foi por HTTP Streaming com Range, pois é entendido nativamente pela tag <audio>, utilizada pelo React no frontend, e facilmente entendiido pelo pacote net/http do Go no backend.
+A preferência foi por HTTP Streaming com Range, pois é entendido nativamente pela tag `<audio>`, utilizada pelo React no frontend, e facilmente atendido pelo pacote `net/http` do Go no backend (`http.ServeContent` já trata os cabeçalhos `Range`, `Accept-Ranges` e `Content-Range` e as respostas 206 e 416).
 
-Além disso, o uso de HTTP Streaming deixa os servidores stateless, ou seja, torna cada request de Range independente. Isso permite escalar melhor a aplicação em várias máquinas.
+Além disso, o uso de HTTP Streaming deixa os servidores stateless, ou seja, torna cada request de Range independente. Isso permite escalar melhor a aplicação em várias máquinas atrás de um load balancer.
 
 Por fim, a aplicação usa áudios já prontos ao invés de realizar broadcast em tempo real, o que elimina a necessidade de WebSockets.
 
 ## Tecnologias Escolhidas
-A aplicação conta com:
-- Frontend em Vite-React em Typescript
-- Backend em Golang com foco em net/http
-- Nginx como Load Balancer HTTP 
-- Armazenamento de dados em MinIO, PostgreSQL e Redis
+- **Frontend:** Vite + React em TypeScript
+- **Backend:** Go, usando `net/http` da biblioteca padrão e GORM para o banco
+- **Metadados:** PostgreSQL 16
+- **Posições de reprodução:** Redis 7
+- **Binários de áudio:** Garage (object storage compatível com S3, acessado pelo cliente `minio-go`)
+- **Load Balancer:** Nginx (planejado)
+- **Infraestrutura local:** Docker Compose
 
-## Estrutura Principal de Pastas
+## Arquitetura
+```text
+                    ┌───────────────┐
+  Browser (React) ─>│ Load Balancer │  (Nginx, planejado)
+                    └───────┬───────┘
+              ┌─────────────┼─────────────┐
+              v             v             v
+         ┌────────┐    ┌────────┐    ┌────────┐
+         │ Go API │    │ Go API │    │ Go API │  <- stateless, N réplicas
+         └───┬────┘    └───┬────┘    └───┬────┘
+             └─────────────┼─────────────┘
+          ┌────────────────┼────────────────┐
+          v                v                v
+        Redis          PostgreSQL         Garage (S3)
+      (posição)       (metadados)     (binários de áudio)
+```
+Como nenhuma instância da API guarda estado em memória, qualquer réplica pode atender qualquer requisição, inclusive requisições Range diferentes de uma mesma faixa.
+
+## Estrutura de Pastas
 ```text
 SPOTCIN/
-├── backend/                     # Servidor em Golang (stateless)
+├── backend/                      # Servidor em Go (stateless)
 │   ├── cmd/
-│   │   └── server/              # Binário compilável e replicável
-│   │       └── main.go          # Lê config, monta dependências, chama internal/, etc.
-│   ├── internal/                # Lógica privado do Go (não exportável)
-│   │   ├── config/              # Variáveis de ambiente
-│   │   ├── database/
-│   │   │   ├── postgres/        # Metadados
-│   │   │   ├── redis/           # Posições de Reprodução
-│   │   │   ├── minio/           # Binários de áudio
-│   │   │   └── migrations/      # SQL versionado
-│   │   ├── handlers/            # Camada HTTP
-│   │   ├── middleware/          # CORS, request-id, etc.
-│   │   ├── models/              # Structs de domínio
-│   │   ├── routes/              # Registro de rotas
-│   │   ├── services/            # Regras de negócio
-│   │   └── storage/             # Interfaces Go
-│   ├── pkg/                     # Código reutilizável (exportável)
-│   ├── devseed/                 # Dados carregados no MinIO/Postgres via script
-│   │   └── audio/
-│   │       ├── mp3/
-│   │       └── wav/
+│   │   └── server/
+│   │       └── main.go           # Conecta às dependências, indexa os áudios e sobe o HTTP
+│   ├── internal/
+│   │   ├── database/             # Conexões: PostgreSQL (db.go), Redis (redis.go), Garage (garage.go)
+│   │   ├── handlers/             # Camada HTTP (health, catálogo, stream)
+│   │   ├── middleware/           # CORS e logging
+│   │   ├── models/               # Structs de domínio (Song)
+│   │   ├── routes/               # Registro de rotas
+│   │   └── services/             # Regras de negócio (scanner de áudios, consultas)
+│   ├── devseed/
+│   │   └── audio/                # Áudios de exemplo
 │   ├── go.mod
 │   └── go.sum
-├── frontend/                    # Vite + React (TypeScript)
+├── frontend/                     # Vite + React (TypeScript)
 │   ├── public/
 │   ├── src/
-│   │   ├── assets/              # Arquivos estáticos
-│   │   ├── components/          # Componentes TSX
-│   │   ├── pages/               # Páginas da aplicação
-│   │   ├── hooks/               # useAudio, usePlayback, etc.
-│   │   ├── services/            # Chamadas HTTP
-│   │   ├── types/               # Tipos TypeScript espelhando os DTOs
-│   │   ├── utils/               # Funções suporte
-│   │   ├── App.tsx
-│   │   └── main.tsx
 │   ├── index.html
 │   └── vite.config.ts
-├── tests/                       # Testes unitários e de integração
-├── deploy/                      # Como o sistema roda
-│   ├── docker-compose.yml
-│   ├── .env.example             # Template de variáveis de ambiente
-│   └── lb/                      # Load Balancer (Nginx)
-│       └── nginx.conf           # Configuração do Nginx
-├── .gitignore
+├── deploy/                       # Infraestrutura
+│   ├── docker-compose.yml        # PostgreSQL, Redis e Garage
+│   ├── garage.toml               # Configuração do Garage
+│   ├── .env.example              # Modelo de variáveis de ambiente
+│   └── lb/
+│       └── nginx.conf            # Load Balancer (planejado)
 └── README.md
-```
-
-## Estrutura do Projeto
-```text
-                    ┌──────────────┐
-  Browser (React) ─>│ Load Balancer│  (Nginx)
-                    └──────┬───────┘
-              ┌────────────┼────────────┐
-              v            v            v
-         ┌────────┐   ┌────────┐   ┌────────┐
-         │ Go API │   │ Go API │   │ Go API │ <- stateless, N réplicas
-         └───┬────┘   └───┬────┘   └───┬────┘
-             │            │            │
-     ┌───────┼────────────┼────────────┼───────┐
-     v       v            v            v       v
-   Redis    PostgreSQL    Object Storage (MinIO)   
- (posição)  (metadados)     (binários de áudio)
 ```
 
 ## Estrutura de Dados e Catálogo
 O sistema lida com três tipos de dados, cada um com um tipo de armazenamento distinto.
 
-### 1. Binários de Áudio (MinIO)
-Esses arquivos são grandes, imutáveis e lidos por intervalo (Range). Por isso, foi escolhido como forma de armazenamento o **MinIO**, que oferece nativamente a leitura por intervalo.
+### 1. Metadados do catálogo (PostgreSQL)
+Os metadados têm estrutura fixa e são consultados por atributos, por isso ficam em um banco relacional. A tabela `songs` é criada automaticamente pelo GORM a partir do modelo `Song` (`backend/internal/models/song.go`):
 
-Estrutura do diretório /audio:
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `id` | texto (UUID v4) | Identificador da faixa |
+| `path` | texto, único | Nome do arquivo dentro da pasta de áudios |
+| `title` | texto | Título (gerado a partir do nome do arquivo) |
+| `artist` | texto | Artista |
+| `album` | texto | Álbum (opcional) |
+| `duration` | inteiro | Duração em segundos (campo previsto; o cálculo ainda não foi implementado) |
+| `size` | inteiro | Tamanho em bytes |
+| `mod_time` | data/hora | Última modificação do arquivo |
+| `mime_type` | texto | `audio/mpeg` (MP3) ou `audio/wav` (WAV) |
+| `created_at` | data/hora | Data de indexação |
+
+O catálogo é preenchido pelo scanner (`backend/internal/services/scanner.go`) ao iniciar o servidor. Ele percorre a pasta de áudios, insere arquivos novos, atualiza os que mudaram de tamanho ou data e remove do banco os que sumiram do disco.
+
+### 2. Binários de áudio (Garage)
+Os arquivos de áudio são grandes, imutáveis e lidos por intervalo (Range). Por isso, o armazenamento escolhido é um object storage compatível com S3, que oferece leitura por intervalo nativamente. O **Garage** sobe pelo Docker Compose com o bucket `spotcin-audio`, e o servidor já conecta a ele na inicialização.
+
+Na Entrega 1 os áudios ainda são servidos da pasta local `backend/devseed/audio`. A organização planejada no bucket é:
 ```text
-/audio/
-  mp3/
-    <uuid>.mp3
-  wav/
-    <uuid>.wav
+spotcin-audio/
+  mp3/<uuid>.mp3
+  wav/<uuid>.wav
 ```
-Onde <uuid> é o mesmo id do registro correspondente na tabela tracks.
+Onde `<uuid>` é o mesmo `id` do registro correspondente no catálogo.
 
-O caminho relativo (ex.: mp3/<uuid>.mp3) é gravado na coluna object_key do banco. Já o caminho absoluto é montado em Go como /audio/ + object_key.
+### 3. Posições de reprodução (Redis) — planejado
+As posições são escritas com frequência (a cada avanço de reprodução), exigem baixa latência e têm vida curta, por isso ficam no **Redis**. A conexão já é feita e verificada no health-check; as rotas de leitura e escrita estão planejadas.
 
-### 2. Metadados (PostgreSQL)
-Os metadados podem ser representados por um modelo relacional. Portanto, foi escolhido o **PostgreSQL** para permitir consultas por atributos e consistência.
+A chave tem o formato `playback:<user_id>:<track_id>` e o valor tem o formato `{"posicao_seg": 123.4, "atualizado_em": "..."}`, com TTL configurável.
 
-Modelo do catálogo:
-```sql
-CREATE TABLE tracks (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title       TEXT NOT NULL,
-    artist      TEXT NOT NULL,
-    album       TEXT,
-    duration_ms INTEGER NOT NULL,
-    mime_type   TEXT NOT NULL,           -- audio/mpeg ou audio/wav
-    size_bytes  BIGINT NOT NULL,
-    bitrate_kbps INTEGER,
-    object_key  TEXT NOT NULL UNIQUE,    -- caminho no MinIO
-    checksum    TEXT NOT NULL,           -- SHA-256
-    created_at  TIMESTAMPTZ DEFAULT now(),
-    updated_at  TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE INDEX idx_tracks_search ON tracks
-  USING GIN (to_tsvector('simple', title || ' ' || artist));
-```
-
-### 3. Posições de Reprodução (Redis)
-As posições são escritas na aplicação frequentemente (a cada avanço de reprodução). Elas também exigem baixa latência e tempo de vida curto. Por isso, para cumprir os requisitos, foi escolhido o **Redis** como forma de armazenamento.
-
-O formato da chave string é `playback:<user_id>:<track_id>`. Já o valor tem o formato `{"posicao_seg": 123.4, "atualizado_em": "..."}`, com TTL configurável.
+## Validações
+- **Formato do arquivo:** o scanner só indexa arquivos com extensão de áudio e confirma o tipo lendo os primeiros bytes do arquivo (assinatura do formato), não apenas a extensão. Arquivos que não são áudio são ignorados e registrados no log.
+- **Intervalo solicitado:** requisições `Range` fora do tamanho do arquivo recebem `416 Range Not Satisfiable` com `Content-Range: bytes */<tamanho>`.
+- **Faixa inexistente:** um `id` que não está no catálogo recebe `404 Not Found`.
+- **Path traversal:** antes de abrir o arquivo, o servidor confirma que o caminho resolvido está dentro da pasta de áudios; caso contrário, responde `403 Forbidden`.
 
 ## Estratégia do Buffer
-A reprodução de áudio no cliente é feita pelo elemento <audio> nativo do navegador, apoiado pelo protocolo HTTP definido no backend. Como o navegador já implementa, de forma nativa e otimizada, o controle de buffer, cabe ao frontend apenas observar e reagir aos eventos do <audio>.
+A reprodução de áudio no cliente é feita pelo elemento `<audio>` nativo do navegador, apoiado pelo protocolo HTTP definido no backend. Como o navegador já implementa, de forma nativa e otimizada, o controle de buffer, cabe ao frontend apenas observar e reagir aos eventos do `<audio>`.
 
 ### Tamanho dos Chunks
 O navegador decide, por conta própria, quantos bytes solicitar a cada requisição. Para isso, ele faz requisições Range ao backend. O backend responde 206 Partial Content com o trecho solicitado.
 
 ### Nível Mínimo para Reprodução
-O início da reprodução é definido pelos eventos do <audio> ao invés de um número fixo de segundos. O que ocorre é que o navegador tenta reproduzir o áudio logo depois de receber uma quantidade suficiente de dados pra começar a decodificar.
+O início da reprodução é definido pelos eventos do `<audio>` ao invés de um número fixo de segundos. O navegador começa a reproduzir assim que recebe dados suficientes para decodificar (evento `canplay`).
 
-### Nível Máximo para Reprodução
-O navegador, de forma nativa, para automaticamente de baixar quando o buffer do <audio> fica cheio. Logo, a determinação de um teto é opcional. Pode ser definido um teto de 30 a 40s para calibrar o desempenho da reprodução.
+### Nível Máximo do Buffer
+O navegador, de forma nativa, para de baixar quando o buffer do `<audio>` fica cheio. Logo, a determinação de um teto é opcional. Pode ser definido um teto de 30 a 40 s para calibrar o desempenho da reprodução.
 
 ### Estratégia contra Jitter
-O <audio> absorve o jitter por meio do buffer à frente do ponto de reprodução (bufferedAhead). Com isso, o papel do frontend é acobertar visualmente as oscilações de rede.
-Na prática, enquanto houver dados no buffer à frente, a reprodução irá continuar msmo que a rede oscile. Caso isso aconteça, o <audio> dispara o evento waiting e pausa a reprodução. O client então vai, por exemplo, exibir um spinner de carregamento até a oscilação passar.
+O `<audio>` absorve o jitter por meio do buffer à frente do ponto de reprodução. Enquanto houver dados no buffer, a reprodução continua mesmo que a rede oscile. Se o buffer esvaziar, o `<audio>` dispara o evento `waiting` e pausa a reprodução; o cliente exibe um indicador de carregamento até o evento `playing`.
 
 ### Pausar e Avançar na Faixa
-Para pausar e retomar, foi escolhido usar os métodos nativos `.pause()` e `.play()` do elemento <audio>.
-Já para avançar, foi definido que o frontend irá alterar o valor de `.currentTime` para `posicao_atual` e o navegador vai disparar uma requisição Range correspondente ao backend. O backend responde 206 com o trecho e a reprodução retoma do novo ponto. Com isso, o frontend não precisa construir a requisição Range manualmente.
+Para pausar e retomar, são usados os métodos nativos `.pause()` e `.play()` do elemento `<audio>`.
+Para avançar, o frontend altera o valor de `.currentTime` e o navegador dispara uma requisição Range correspondente ao backend. O backend responde 206 com o trecho e a reprodução retoma do novo ponto. Com isso, o frontend não precisa construir a requisição Range manualmente.
 
 ## Protocolo de Transmissão
-O protocolo de transmissão escolhido é HTTP/1.1 sobre REST, com suporte a Range requests
+O protocolo de transmissão escolhido é HTTP/1.1 com suporte a requisições Range.
 
-### Rotas:
-```text
-GET api/tracks               # Catálogo
-GET api/tracks/{id}          # Metadados
-GET api/tracks/{id}/stream   # Áudio
-GET /api/playback/{trackId}  # Última posição do usuário
-PUT /api/playback/{trackId}  # Salva posição de reprodução
-GET /healthz                 # Health Check
-```
-**OBS:** `{id}` e `{trackId}` são UUIDs v4.
+### Rotas
+| Método | Rota | Descrição | Status |
+|---|---|---|---|
+| GET | `/health` | Processo vivo | Implementada |
+| GET | `/health/ready` | Estado do PostgreSQL, Redis e Garage | Implementada |
+| GET | `/api/songs` | Catálogo | Implementada |
+| GET | `/api/stream/{id}` | Áudio, com suporte a Range | Implementada |
+| GET | `/api/songs/{id}` | Metadados de uma faixa | Planejada |
+| GET | `/api/playback/{id}` | Última posição de reprodução | Planejada |
+| PUT | `/api/playback/{id}` | Salva a posição de reprodução | Planejada |
 
-### Rota de Catálogo
-Request:
-```text
-GET /api/tracks HTTP/1.1
-Host: <ip-virtual-do-load-balancer>
-Accept: application/json
-```
+**OBS:** `{id}` é o UUID v4 da faixa.
 
-#### Response 200:
-HTTP:
+### GET /health
 ```text
 HTTP/1.1 200 OK
-Content-Type: application/json; charset=utf-8
-Cache-Control: public, max-age=60
-```
-JSON:
-```text
-{
-  "total": 1,
-  "itens": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "titulo": "audio1",
-      "formato": "mp3",
-      "mime_type": "audio/mpeg",
-      "duracao_seg": 360,
-      "tamanho_bytes": 5760000,
-      "stream_url": "/api/tracks/550e8400-e29b-41d4-a716-446655440000/stream"
-    }
-  ]
-}
-```
-
-#### Response 503 (DB indisponível):
-HTTP:
-```text
-HTTP/1.1 503 Service Unavailable
-Content-Type: application/json; charset=utf-8
+Content-Type: application/json
 Cache-Control: no-store
-```
-JSON:
-```text
-{"erro":"db_indisponivel"}
+
+{"status":"ok"}
 ```
 
-### Rota de Metadados
-Request:
-```text
-GET /api/tracks/550e8400-e29b-41d4-a716-446655440000 HTTP/1.1
-Host: <ip-virtual-do-load-balancer>
-Accept: application/json
+### GET /health/ready
+Response 200 (todas as dependências ok):
+```json
+{"status":"ok","checks":{"garage":"ok","postgres":"ok","redis":"ok"}}
 ```
 
-#### Response 200:
-HTTP:
+Response 503 (alguma dependência indisponível):
+```json
+{"status":"degraded","checks":{"garage":"ok","postgres":"ok","redis":"fail: dial tcp [::1]:6379: connect: connection refused"}}
+```
+
+### GET /api/songs
 ```text
 HTTP/1.1 200 OK
-Content-Type: application/json; charset=utf-8
-Cache-Control: public, max-age=60
+Content-Type: application/json
 ```
-JSON:
-```text
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "titulo": "audio1",
-  "formato": "mp3",
-  "mime_type": "audio/mpeg",
-  "duracao_seg": 360,
-  "tamanho_bytes": 5760000,
-  "stream_url": "/api/tracks/550e8400-e29b-41d4-a716-446655440000/stream"
-}
-```
+O corpo é uma lista JSON de faixas, com os campos da tabela `songs` (ver exemplo em [Catálogo](#catálogo)). Em caso de erro no banco, a resposta é `500 Internal Server Error`.
 
-#### Response 404 (Track não encontrada):
-HTTP:
-```text
-HTTP/1.1 404 Not Found
-Content-Type: application/json; charset=utf-8
-```
-JSON:
-```text
-{"erro":"track_nao_encontrada"}
-```
-
-### Rota de Stream
-#### Sem Range:
-Request:
-```text
-GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/stream HTTP/1.1
-Host: <ip-virtual-do-load-balancer>
-```
-
-HTTP Response 200:
+### GET /api/stream/{id}
+Sem Range: `200 OK` com o arquivo completo.
 ```text
 HTTP/1.1 200 OK
-Content-Type: audio/mpeg
-Content-Length: 5760000
 Accept-Ranges: bytes
-Cache-Control: public, max-age=3600
+Content-Type: audio/wav
+Content-Length: 10769278
 ```
 
-#### Com Range:
-Request satisfazível:
+Com Range satisfazível:
 ```text
-GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/stream HTTP/1.1
-Host: <ip-virtual-do-load-balancer>
+GET /api/stream/{id} HTTP/1.1
 Range: bytes=1048576-2097151
 ```
-
-HTTP Response 206:
 ```text
 HTTP/1.1 206 Partial Content
-Content-Type: audio/mpeg
-Content-Range: bytes 1048576-2097151/5760000
-Content-Length: 1048576
 Accept-Ranges: bytes
-Cache-Control: public, max-age=3600
+Content-Type: audio/wav
+Content-Range: bytes 1048576-2097151/10769278
+Content-Length: 1048576
 ```
 
-Request não satisfazível:
+Com Range não satisfazível:
 ```text
-GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/stream HTTP/1.1
-Range: bytes=99999999-100000000
+HTTP/1.1 416 Requested Range Not Satisfiable
+Content-Range: bytes */10769278
 ```
 
-HTTP Response 416:
+Faixa inexistente:
 ```text
-HTTP/1.1 416 Range Not Satisfiable
-Content-Type: text/plain; charset=utf-8
-Content-Range: bytes */5760000
-Content-Length: 0
+HTTP/1.1 404 Not Found
 ```
 
-### Rota de Última Posição de Reprodução
-Request:
-```text
-GET /api/playback/550e8400-e29b-41d4-a716-446655440000 HTTP/1.1
-Accept: application/json
-```
-
-#### Response 200:
-HTTP:
-```text
-HTTP/1.1 200 OK
-Content-Type: application/json; charset=utf-8
-Cache-Control: private, no-store
-```
-JSON:
-```text
+### GET /api/songs/{id} (planejada)
+Response 200:
+```json
 {
-  "track_id": "550e8400-e29b-41d4-a716-446655440000",
+  "id": "0d36235f-93d1-47c1-81eb-e244f502bfc2",
+  "title": "Kokiri Forest",
+  "artist": "Unknown",
+  "duration": 120,
+  "size": 10769278,
+  "mime_type": "audio/wav"
+}
+```
+Response 404: `{"erro":"track_nao_encontrada"}`
+
+### GET /api/playback/{id} (planejada)
+Response 200:
+```json
+{
+  "track_id": "0d36235f-93d1-47c1-81eb-e244f502bfc2",
   "posicao_seg": 123.4,
   "atualizado_em": "2026-11-15T14:32:00Z"
 }
 ```
+Response 404: `{"erro":"posicao_nao_encontrada"}`
 
-#### Response 404 (Nenhuma posição encontrada):
-HTTP:
-```text
-HTTP/1.1 404 Not Found
-Content-Type: application/json; charset=utf-8
-```
-JSON:
-```text
-{"erro":"posicao_nao_encontrada"}
-```
-
-### Rota de Salvar Posição
-Request HTTP:
-```text
-PUT /api/playback/550e8400-e29b-41d4-a716-446655440000 HTTP/1.1
-Content-Type: application/json; charset=utf-8
-```
-Request JSON:
-```text
+### PUT /api/playback/{id} (planejada)
+Request:
+```json
 {"posicao_seg": 123.4}
 ```
+- `204 No Content`: posição salva.
+- `422 Unprocessable Entity`: `{"erro":"posicao_invalida"}` (posição negativa ou ausente).
+- `404 Not Found`: `{"erro":"track_nao_encontrada"}`.
 
-#### Response 204:
-HTTP:
-```text
-HTTP/1.1 204 No Content
-Cache-Control: no-store
-```
-
-#### Response 422 (Payload inválido):
-HTTP:
-```text
-HTTP/1.1 422 Unprocessable Entity
-Content-Type: application/json; charset=utf-8
-```
-JSON:
-```text
-{"erro":"posicao_invalida"}
-```
-
-#### Response 404 (Track inexistente):
-JSON:
-```text
-{"erro":"track_nao_encontrada"}
-```
-
-### Rota de Health Check
-Request HTTP:
-```text
-GET /healthz HTTP/1.1
-```
-Request JSON:
-```text
-{"status":"ok"}
-```
-
-#### Response 200:
-HTTP:
-```text
-HTTP/1.1 200 OK
-Content-Type: application/json; charset=utf-8
-Cache-Control: no-store
-```
-
-#### Response 503 (Serviço indisponível):
-HTTP:
-```text
-HTTP/1.1 503 Service Unavailable
-Content-Type: application/json; charset=utf-8
-Cache-Control: no-store
-```
-JSON:
-```text
-{"status":"degraded","dependencias":{"db":"indisponivel"}}
-```
-
-### Autores:
+## Autores
 - [@adnalisia](https://github.com/adnalisia)
 - [@brunoslm](https://github.com/brunoslm)
 - [@Pedro-glitch-370](https://github.com/Pedro-glitch-370)
