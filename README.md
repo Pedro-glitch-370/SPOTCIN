@@ -18,6 +18,12 @@ cd SPOTCIN
 
 ### 2. Configurar as variáveis de ambiente
 O backend lê o arquivo `backend/.env` ao iniciar. Crie-o a partir do modelo em `deploy/`:
+
+Windows (PowerShell):
+```powershell
+copy deploy\.env.example backend\.env
+```
+Linux/macOS:
 ```bash
 cp deploy/.env.example backend/.env
 ```
@@ -60,14 +66,28 @@ Nesta fase, os metadados do catálogo ficam no **PostgreSQL**, e o Redis e o Gar
 
 Para conferir a realização das tarefas da Entrega 1, inicie o servidor e, em outro terminal, execute os comandos abaixo.
 
+> **Windows:** no PowerShell, `curl` é um apelido para outro comando; use `curl.exe`, como nos exemplos. O Python é chamado de `python` no Windows e de `python3` no Linux.
+
 ### Health-check
 Confirmar que o processo está vivo:
+
+Windows (PowerShell):
+```powershell
+curl.exe -i http://localhost:8080/health
+```
+Linux/macOS:
 ```bash
 curl -i http://localhost:8080/health
 ```
 A saída esperada é `{"status":"ok"}`.
 
 Confirmar as dependências:
+
+Windows (PowerShell):
+```powershell
+curl.exe -s http://localhost:8080/health/ready | python -m json.tool
+```
+Linux/macOS:
 ```bash
 curl -s http://localhost:8080/health/ready | python3 -m json.tool
 ```
@@ -85,6 +105,11 @@ Saída esperada:
 Se alguma dependência falhar, a resposta é `503 Service Unavailable` com `"status": "degraded"` e o erro no campo correspondente.
 
 ### Catálogo
+Windows (PowerShell):
+```powershell
+curl.exe -s http://localhost:8080/api/songs | python -m json.tool
+```
+Linux/macOS:
 ```bash
 curl -s http://localhost:8080/api/songs | python3 -m json.tool
 ```
@@ -106,6 +131,12 @@ Exemplo de saída esperada:
 
 ### Streaming com Range (resposta 206 + Content-Range)
 Substitua `<ID>` por um `id` retornado pelo catálogo:
+
+Windows (PowerShell):
+```powershell
+curl.exe -i -H "Range: bytes=0-1023" http://localhost:8080/api/stream/<ID>
+```
+Linux/macOS:
 ```bash
 curl -i -H "Range: bytes=0-1023" http://localhost:8080/api/stream/<ID>
 ```
@@ -125,6 +156,11 @@ Date: Tue, 17 Nov 2026 22:49:48 GMT
 ```
 
 ### Range inválido (resposta 416)
+Windows (PowerShell):
+```powershell
+curl.exe -i -H "Range: bytes=999999999-" http://localhost:8080/api/stream/<ID>
+```
+Linux/macOS:
 ```bash
 curl -i -H "Range: bytes=999999999-" http://localhost:8080/api/stream/<ID>
 ```
