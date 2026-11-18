@@ -9,7 +9,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// monta o mux, registra as rotas e envolve com os middlewares
+// Setup monta o mux, registra as rotas e envolve com os middlewares
+// A ordem é CORS, RequestID, Logging e então mux
 func Setup(db *gorm.DB) http.Handler {
 	mux := http.NewServeMux()
 
@@ -18,10 +19,10 @@ func Setup(db *gorm.DB) http.Handler {
 	mux.HandleFunc("GET /api/songs", handlers.ListSongs(db))
 	mux.HandleFunc("GET /api/stream/{id}", handlers.StreamSong(db))
 
-	// aplica middlewares em cadeia
 	var h http.Handler = mux
-	h = middleware.CORS(h)
 	h = middleware.Logging(h)
+	h = middleware.RequestID(h)
+	h = middleware.CORS(h)
 
 	return h
 }

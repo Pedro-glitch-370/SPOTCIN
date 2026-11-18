@@ -5,12 +5,18 @@ import (
 	"SPOTCIN/backend/internal/routes"
 	"SPOTCIN/backend/internal/services"
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
 
 	_ "github.com/joho/godotenv/autoload"
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
+	
 	db, err := database.Open()
 	if err != nil {
 		log.Fatalf("abrindo DB: %v", err)
