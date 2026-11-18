@@ -15,6 +15,14 @@ func main() {
 		log.Fatalf("abrindo DB: %v", err)
 	}
 
+	if err := database.OpenRedis(); err != nil {
+		log.Fatalf("abrindo Redis: %v", err)
+	}
+
+	if err := database.OpenGarage(); err != nil {
+		log.Fatalf("abrindo Garage: %v", err)
+	}
+
 	if err := services.ScanDatabase(db); err != nil {
 		log.Printf("scan inicial falhou: %v", err)
 	}

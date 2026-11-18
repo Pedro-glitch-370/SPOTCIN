@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: spotcin-postgres
+    environment:
+      POSTGRES_USER: spotcin
+      POSTGRES_PASSWORD: spotcin
+      POSTGRES_DB: spotcin
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: spotcin-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+
+  garage:
+    image: dxflrs/garage:v2.4.1
+    container_name: spotcin-garage
+    command: /garage server --single-node --default-access-key --default-bucket
+    environment:
+      GARAGE_DEFAULT_ACCESS_KEY: minioadmin
+      GARAGE_DEFAULT_SECRET_KEY: minioadminminioadmin
+      GARAGE_DEFAULT_BUCKET: spotcin-audio
+    ports:
+      - "3900:3900"
+      - "3903:3903"
+    volumes:
+      - garagedata:/var/lib/garage/data
+      - garagemeta:/var/lib/garage/meta
+      - ./garage.toml:/etc/garage.toml:ro
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  garagedata:
+  garagemeta:
