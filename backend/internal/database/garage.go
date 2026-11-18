@@ -9,6 +9,7 @@ import (
 )
 
 var GarageClient *minio.Client
+var GarageBucket string
 
 func OpenGarage() error {
 	endpoint := os.Getenv("GARAGE_ENDPOINT")
@@ -40,6 +41,8 @@ func OpenGarage() error {
 	if bucket == "" {
 		bucket = "spotcin-audio"
 	}
+	GarageBucket = bucket
+
 	exists, err := client.BucketExists(ctx, bucket)
 	if err != nil {
 		return err

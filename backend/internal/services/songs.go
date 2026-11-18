@@ -2,7 +2,6 @@ package services
 
 import (
 	"errors"
-	"path/filepath"
 
 	"SPOTCIN/backend/internal/models"
 
@@ -31,5 +30,5 @@ func GetSongPath(db *gorm.DB, id string) (absPath, mime string, err error) {
 		}
 		return "", "", err
 	}
-	return filepath.Join(AudioDir, song.Path), song.MimeType, nil
+	return song.Path, song.MimeType, nil
 }
