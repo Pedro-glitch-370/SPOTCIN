@@ -1,11 +1,11 @@
 package database
 
 import (
+	"errors"
 	"os"
 
 	"SPOTCIN/backend/internal/models"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -23,11 +23,7 @@ func Open() (*gorm.DB, error) {
 			return nil, err
 		}
 	} else {
-		// esse SQLite é apenas temporário, o arquivo fica no diretório de trabalho atual
-		db, err = gorm.Open(sqlite.Open("spotcin.db"), &gorm.Config{})
-		if err != nil {
-			return nil, err
-		}
+		return nil, errors.New("DATABASE_URL não definida")
 	}
 
 	if err := db.AutoMigrate(&models.Song{}); err != nil {

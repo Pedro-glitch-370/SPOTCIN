@@ -15,12 +15,29 @@ Acesse o diretório do projeto:
 ```
 
 Para iniciar o servidor:
-- Entre na pasta /backend:
-```
+- Entre na pasta backend/ e crie o arquivo .env com base em .env.example:
+```bash
 cd backend
 ```
-- Inicialize com:
+- Entre na pasta /deploy:
+```bash
+cd deploy
 ```
+- Subir a infraestrutura:
+```bash
+docker compose up -d
+```
+- Entre na pasta /backend:
+```bash
+cd ..
+cd backend
+```
+- Baixe as dependências:
+```bash
+go mod tidy
+```
+- Inicialize com:
+```bash
 go run ./cmd/server
 ```
 
@@ -44,10 +61,27 @@ Neste início de período de desenvolvimento, os dados são armazenados somente 
 Para conferir a realização das tarefas da Entrega 1, inicie o servidor e, em outro terminal, execute os comandos abaixo.
 
 ### Para realizar o health-check:
+Confirmar que o processo está vivo:
 ```bash
 curl -i http://localhost:8080/health
 ```
 A saída esperada é `{"status":"ok"}`.
+
+Confirmar as dependências:
+```bash
+curl -s http://localhost:8080/health/ready | python -m json.tool
+```
+A saída esperada é:
+```bash
+{
+    "status": "ok",
+    "checks": {
+        "garage": "ok",
+        "postgres": "ok",
+        "redis": "ok"
+    }
+}
+```
 
 ### Para conferir a rota de catálogo:
 ```bash
@@ -173,23 +207,6 @@ SPOTCIN/
 │       └── nginx.conf           # Configuração do Nginx
 ├── .gitignore
 └── README.md
-```
-
-## Estrutura do Projeto
-```text
-                    ┌──────────────┐
-  Browser (React) ─>│ Load Balancer│  (Nginx)
-                    └──────┬───────┘
-              ┌────────────┼────────────┐
-              v            v            v
-         ┌────────┐   ┌────────┐   ┌────────┐
-         │ Go API │   │ Go API │   │ Go API │ <- stateless, N réplicas
-         └───┬────┘   └───┬────┘   └───┬────┘
-             │            │            │
-     ┌───────┼────────────┼────────────┼───────┐
-     v       v            v            v       v
-   Redis    PostgreSQL    Object Storage (MinIO)   
- (posição)  (metadados)     (binários de áudio)
 ```
 
 ## Estrutura de Dados e Catálogo

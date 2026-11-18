@@ -14,6 +14,7 @@ func Setup(db *gorm.DB) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", handlers.Health)
+	mux.HandleFunc("GET /health/ready", handlers.Ready(db))
 	mux.HandleFunc("GET /api/songs", handlers.ListSongs(db))
 	mux.HandleFunc("GET /api/stream/{id}", handlers.StreamSong(db))
 

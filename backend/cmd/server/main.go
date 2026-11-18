@@ -1,12 +1,13 @@
 package main
 
 import (
-	"log"
-	"net/http"
-
 	"SPOTCIN/backend/internal/database"
 	"SPOTCIN/backend/internal/routes"
 	"SPOTCIN/backend/internal/services"
+	"log"
+	"net/http"
+
+	_ "github.com/joho/godotenv/autoload"
 )
 
 func main() {
