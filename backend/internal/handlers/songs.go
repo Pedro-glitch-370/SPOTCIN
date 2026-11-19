@@ -3,9 +3,11 @@ package handlers
 import (
 	"SPOTCIN/backend/internal/database"
 	"SPOTCIN/backend/internal/services"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -71,9 +73,15 @@ func StreamSong(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 
+		buf, err := io.ReadAll(obj)
+		if err != nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+
 		w.Header().Set("Content-Type", mime)
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		http.ServeContent(w, r, key, info.LastModified, obj)
+		http.ServeContent(w, r, key, info.LastModified, bytes.NewReader(buf))
 	}
 }
 

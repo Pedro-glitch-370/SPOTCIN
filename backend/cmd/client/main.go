@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -17,11 +18,11 @@ func main() {
 	var (
 		base    = flag.String("base", "http://localhost:8080", "URL do backend")
 		songID  = flag.String("song", "", "ID da música (se vazio, lista e pede escolha)")
-		start   = flag.Float64("start", -1, "posição inicial em segundos (default: do Redis; -1 = automático)") //PONTODEATENCAO
+		start   = flag.Float64("start", -1, "posição inicial em segundos")
 		userID  = flag.String("user", "", "user_id (default: gera UUID v4)")
 		minBuf  = flag.Int64("min", 64*1024, "buffer mínimo (bytes)")
 		maxBuf  = flag.Int64("max", 512*1024, "buffer máximo (bytes)")
-		jitter  = flag.Duration("jitter", 50*1000*1000, "jitter do consumo (ex.: 50ms)")
+		jitter  = flag.Duration("jitter", 50*1000*1000, "jitter do consumo")
 	)
 	flag.Parse()
 
@@ -74,11 +75,72 @@ func main() {
 	offset := PosToBytes(posicaoSeg, meta)
 	fmt.Printf("offset inicial: %d bytes\n", offset)
 
-	// Passo 4 é abrir stream, montar o buffer, ligar o player, essas coisas
-	// Mas, por ora, vamos só provar que as chamadas de API funcionam
-	fmt.Printf("buffer: min=%dB max=%dB jitter=%s\n", *minBuf, *maxBuf, *jitter)
+	// Passo 4 é abrir o stream
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	fmt.Println("OK: cliente 6.1 inicializado (stream virá no 6.2)")
+	streamClient := &http.Client{}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, *base+"/api/stream/"+id, nil)
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
+
+	resp, err := streamClient.Do(req)
+	if err != nil {
+		log.Fatalf("stream: %v", err)
+	}
+	if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
+		log.Fatalf("offset %d fora do arquivo (416)", offset)
+	}
+	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
+		log.Fatalf("stream: %s", resp.Status)
+	}
+	fmt.Printf("stream aberto: status=%d range=%s\n", resp.StatusCode, req.Header.Get("Range"))
+
+	// Passo 5 é montar o buffer com o downloader e o player
+	buf := NewBuffer(int(*minBuf), int(*maxBuf))
+
+	// O downloader lê do socket e escreve no buffer
+	go func() {
+		defer buf.Close()
+		defer resp.Body.Close()
+		chunk := make([]byte, 32*1024)
+		total := 0
+		for {
+			n, err := resp.Body.Read(chunk)
+			if n > 0 {
+				buf.Write(chunk[:n])
+				total += n
+				if total%(1<<20) == 0 { // log a cada 1 MB baixado pra comprovar
+					log.Printf("downloader: %d KB baixados, buffer=%d KB", total/1024, buf.Len()/1024)
+				}
+			}
+			if err != nil {
+				log.Printf("downloader: fim (%d KB, %v)", total/1024, err)
+				return
+			}
+		}
+	}()
+
+	// O player consome do buffer e faz PUT periódico
+	player := NewPlayer(buf, bitrate, *jitter)
+	go func() {
+		player.Run(ctx, func(posBytes int64) {
+			posSeg := BytesToPos(posBytes, meta)
+			if err := api.PutPlayback(ctx, id, posSeg); err != nil {
+				log.Printf("PUT playback: %v", err)
+			} else {
+				log.Printf("PUT playback: pos=%.2fs", posSeg)
+			}
+		})
+		cancel() // fim de arquivo
+	}()
+
+	// espera o player terminar ou sair
+	<-ctx.Done()
+
+	// último PUT
+	finalPos := BytesToPos(player.PosBytes(), meta)
+	api.PutPlayback(context.Background(), id, finalPos)
+	fmt.Printf("fim: posição final %.2fs (%d bytes)\n", finalPos, player.PosBytes())
 }
 
 // escolherMusica lista os áudios e lê o input do usuário
