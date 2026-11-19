@@ -157,6 +157,9 @@ func BytesToPos(offsetBytes int64, meta *SongMeta) float64 {
 	if meta.Duration <= 0 || meta.Size <= 0 {
 		return 0
 	}
+	if offsetBytes > meta.Size {
+		offsetBytes = meta.Size
+	}
 	bitrate := float64(meta.Size) / float64(meta.Duration)
 	return float64(offsetBytes) / bitrate
 }

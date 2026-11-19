@@ -5,11 +5,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -23,6 +25,7 @@ func main() {
 		minBuf  = flag.Int64("min", 64*1024, "buffer mínimo (bytes)")
 		maxBuf  = flag.Int64("max", 512*1024, "buffer máximo (bytes)")
 		jitter  = flag.Duration("jitter", 50*1000*1000, "jitter do consumo")
+		dropAfter = flag.Int64("drop-after", 0, "fecha o socket após N bytes baixados")
 	)
 	flag.Parse()
 
@@ -75,53 +78,16 @@ func main() {
 	offset := PosToBytes(posicaoSeg, meta)
 	fmt.Printf("offset inicial: %d bytes\n", offset)
 
-	// Passo 4 é abrir o stream
+	// Passo 4 é buffer + player
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	streamClient := &http.Client{}
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, *base+"/api/stream/"+id, nil)
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
-
-	resp, err := streamClient.Do(req)
-	if err != nil {
-		log.Fatalf("stream: %v", err)
-	}
-	if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
-		log.Fatalf("offset %d fora do arquivo (416)", offset)
-	}
-	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
-		log.Fatalf("stream: %s", resp.Status)
-	}
-	fmt.Printf("stream aberto: status=%d range=%s\n", resp.StatusCode, req.Header.Get("Range"))
-
-	// Passo 5 é montar o buffer com o downloader e o player
 	buf := NewBuffer(int(*minBuf), int(*maxBuf))
-
-	// O downloader lê do socket e escreve no buffer
-	go func() {
-		defer buf.Close()
-		defer resp.Body.Close()
-		chunk := make([]byte, 32*1024)
-		total := 0
-		for {
-			n, err := resp.Body.Read(chunk)
-			if n > 0 {
-				buf.Write(chunk[:n])
-				total += n
-				if total%(1<<20) == 0 { // log a cada 1 MB baixado pra comprovar
-					log.Printf("downloader: %d KB baixados, buffer=%d KB", total/1024, buf.Len()/1024)
-				}
-			}
-			if err != nil {
-				log.Printf("downloader: fim (%d KB, %v)", total/1024, err)
-				return
-			}
-		}
-	}()
-
-	// O player consome do buffer e faz PUT periódico
 	player := NewPlayer(buf, bitrate, *jitter)
+	player.posBytes = offset
+
+	// o player é em goroutine
+	playerDone := make(chan struct{})
 	go func() {
 		player.Run(ctx, func(posBytes int64) {
 			posSeg := BytesToPos(posBytes, meta)
@@ -131,13 +97,66 @@ func main() {
 				log.Printf("PUT playback: pos=%.2fs", posSeg)
 			}
 		})
-		cancel() // fim de arquivo
+		close(playerDone)
 	}()
 
-	// espera o player terminar ou sair
-	<-ctx.Done()
+	// downloader com loop de reconexão
+	downloaderDone := make(chan struct{})
+	go func() {
+		defer close(downloaderDone)
+		defer buf.Close() // sinaliza fim de arquivo pro player quando desistir
 
-	// último PUT
+		totalDownloaded := int64(0)
+		connections := 0
+		for {
+			// Se o player já acabou, não reconecta mais
+			if player.PosBytes() >= meta.Size {
+				log.Printf("downloader: player consumiu tudo (%d/%d bytes), encerrando",
+					player.PosBytes(), meta.Size)
+				return
+			}
+
+			// offset de retomada, onde o player tá
+			resumeOffset := player.PosBytes()
+			log.Printf("conexão #%d: resume em %d bytes (%.2fs)",
+				connections+1, resumeOffset, BytesToPos(resumeOffset, meta))
+
+			n, err := runDownloader(ctx, *base, id, resumeOffset, buf, *dropAfter, nil)
+			connections++
+			totalDownloaded += n
+
+			// fim normal, sem drop
+			if err == nil && *dropAfter == 0 {
+				return 
+			}
+
+			// erro real
+			if err != nil && err != io.EOF && ctx.Err() == nil {
+				if strings.Contains(err.Error(), "416") {
+					log.Printf("downloader: 416, fim do arquivo, encerrando")
+					return
+				}
+				log.Printf("downloader: reconectando após erro: %v", err)
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+
+			// drop proposital, reconecta se ainda não consumiu tudo
+			if *dropAfter > 0 {
+				log.Printf("downloader: reconectando após drop (total baixado=%d KB)", totalDownloaded/1024)
+				time.Sleep(200 * time.Millisecond)
+				continue
+			}
+			return
+		}
+	}()
+
+	// espera o player terminar o arquivo ou sair
+	<-playerDone
+	cancel()
+	<-downloaderDone
+
+	// PUT final
 	finalPos := BytesToPos(player.PosBytes(), meta)
 	api.PutPlayback(context.Background(), id, finalPos)
 	fmt.Printf("fim: posição final %.2fs (%d bytes)\n", finalPos, player.PosBytes())
@@ -185,5 +204,68 @@ func escolherMusica(ctx context.Context, api *APIClient) string {
 			return songs[n-1].ID
 		}
 		fmt.Println("entrada inválida")
+	}
+}
+
+// runDownloader abre o stream a partir de offsetBytes, lê e escreve no buffer
+// Retorna os bytes que foram baixados nessa conexão
+func runDownloader(
+	ctx context.Context,
+	base, id string,
+	offsetBytes int64,
+	buf *Buffer,
+	dropAfter int64,
+	onProgress func(total int64),
+) (int64, error) {
+	client := &http.Client{}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
+		base+"/api/stream/"+id, nil)
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offsetBytes))
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
+		return 0, fmt.Errorf("offset %d fora do arquivo (416)", offsetBytes)
+	}
+	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("stream: %s", resp.Status)
+	}
+
+	log.Printf("stream aberto: status=%d range=bytes=%d-", resp.StatusCode, offsetBytes)
+
+	chunk := make([]byte, 32*1024)
+	var total int64
+	for {
+		select {
+		case <-ctx.Done():
+			return total, ctx.Err()
+		default:
+		}
+
+		n, err := resp.Body.Read(chunk)
+		if n > 0 {
+			buf.Write(chunk[:n])
+			total += int64(n)
+			if total%(1<<20) == 0 {
+				log.Printf("downloader: %d KB baixados (conexão), buffer=%d KB", total/1024, buf.Len()/1024)
+			}
+			// fecha o corpo depois de N bytes baixados e retorna (só pra simular a queda)
+			if dropAfter > 0 && total >= dropAfter {
+				log.Printf("downloader: drop-after atingido (%d KB) — fechando socket", total/1024)
+				return total, nil
+			}
+		}
+		if err != nil {
+			if err == io.EOF {
+				log.Printf("downloader: fim natural (%d KB)", total/1024)
+				return total, nil
+			}
+			log.Printf("downloader: erro (%d KB, %v)", total/1024, err)
+			return total, err
+		}
 	}
 }
