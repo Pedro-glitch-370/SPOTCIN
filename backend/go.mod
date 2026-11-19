@@ -3,11 +3,13 @@ module SPOTCIN/backend
 go 1.27.4
 
 require (
+	github.com/go-audio/riff v1.0.0
 	github.com/google/uuid v1.6.0
 	github.com/h2non/filetype v1.1.3
 	github.com/joho/godotenv v1.5.1
 	github.com/minio/minio-go/v7 v7.4.1
 	github.com/redis/go-redis/v9 v9.23.0
+	github.com/tcolgate/mp3 v0.0.0-20170426193717-e79c5a46d300
 	gorm.io/driver/postgres v1.6.3
 	gorm.io/gorm v1.31.2
 )
