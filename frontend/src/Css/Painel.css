@@ -7,7 +7,7 @@
     margin-top: 5%;
     background-color: #2f313b2f;
     padding: 20px;
-    width: 80%;
+    width: 50%;
     border-radius: 40px;
 }
 
@@ -19,5 +19,11 @@
     height: 200px;
 }
 .Titulo{
-    color: rgb(224, 57, 57);
+    color: #e03939;
+    font-size: 56px;
+}
+
+.Sub{
+    margin-top: -15%;
+    color: aliceblue;
 }
