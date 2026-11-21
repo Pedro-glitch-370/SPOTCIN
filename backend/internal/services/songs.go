@@ -32,3 +32,16 @@ func GetSongPath(db *gorm.DB, id string) (absPath, mime string, err error) {
 	}
 	return song.Path, song.MimeType, nil
 }
+
+// GetSongByID retorna os metadados de uma faixa pelo ID
+// Se não existir, retorna ErrSongNotFound
+func GetSongByID(db *gorm.DB, id string) (*models.Song, error) {
+	var song models.Song
+	if err := db.First(&song, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrSongNotFound
+		}
+		return nil, err
+	}
+	return &song, nil
+}

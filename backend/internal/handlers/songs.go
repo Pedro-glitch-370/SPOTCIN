@@ -76,3 +76,29 @@ func StreamSong(db *gorm.DB) http.HandlerFunc {
 		http.ServeContent(w, r, key, info.LastModified, obj)
 	}
 }
+
+// GetSong retorna metadados de uma faixa em JSON de acordo com o contrato definido
+func GetSong(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+
+		song, err := services.GetSongByID(db, id)
+		if err != nil {
+			if errors.Is(err, services.ErrSongNotFound) {
+				writeJSON(w, http.StatusNotFound, map[string]string{"erro": "track_nao_encontrada"})
+				return
+			}
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"erro": "internal_error"})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":        song.ID,
+			"title":     song.Title,
+			"artist":    song.Artist,
+			"duration":  song.Duration,
+			"size":      song.Size,
+			"mime_type": song.MimeType,
+		})
+	}
+}
