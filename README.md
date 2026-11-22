@@ -210,13 +210,63 @@ Linux/macOS:
 ```bash
 curl -sS -H "X-User-ID: test-1" http://localhost:8080/api/playback/<ID>
 ```
-O comando irá reetornar imediatamente:
+O comando irá retornar imediatamente:
 ```json
 {"track_id":"feadc394-bc6f-40e1-835c-dd9fbdda4f15","posicao_seg":60,"atualizado_em":"2026-11-21T14:25:03.3941125Z"}
 ```
 Exemplo de saída esperada no terminal do servidor:
 ```json
 {"time":"2026-11-21T11:26:19.3842379-03:00","level":"INFO","msg":"http_request","method":"GET","path":"/api/playback/feadc394-bc6f-40e1-835c-dd9fbdda4f15","status":200,"duration_ms":1,"bytes":116,"request_id":"4f89f13b-216f-4479-89e2-f769396ca759"}
+```
+
+### Cliente de Terminal
+O cliente consome o stream com requisições Range e um buffer de reprodução, sem baixar o arquivo completo antes de começar. Com o servidor rodando, em outro terminal:
+```bash
+cd backend
+go run ./cmd/client
+```
+Sem a flag `-song`, o cliente lista o catálogo e pede para escolher uma música pelo número ou pelo `id`. Se houver posição salva no Redis para o usuário, a reprodução retoma desse ponto.
+
+Exemplo com flags:
+```bash
+go run ./cmd/client -song <ID> -user test-1 -start 30 -min 65536 -max 524288 -jitter 100ms -drop-after 1048576
+```
+
+| Flag | Padrão | Descrição |
+|---|---|---|
+| `-base` | `http://localhost:8080` | URL do backend |
+| `-song` | — | `id` da música (se vazio, lista o catálogo) |
+| `-user` | UUID v4 gerado | Valor do cabeçalho `X-User-ID` |
+| `-start` | posição salva no Redis | Posição inicial em segundos |
+| `-min` | `65536` | Nível mínimo do buffer (bytes) para iniciar a reprodução |
+| `-max` | `524288` | Nível máximo do buffer (bytes); acima disso o download pausa |
+| `-jitter` | `50ms` | Oscilação aleatória simulada no consumo |
+| `-drop-after` | `0` (desligado) | Fecha a conexão após N bytes, para simular quedas |
+
+#### Comandos durante a reprodução
+Com o cliente tocando, digite um comando e pressione Enter:
+
+| Comando | Ação |
+|---|---|
+| `p` | Pausa ou retoma a reprodução |
+| `a <seg>` | Avança `<seg>` segundos |
+| `v <seg>` | Volta `<seg>` segundos |
+| `i <seg>` | Vai para a posição `<seg>` da faixa |
+| `q` | Salva a posição e encerra |
+
+Ao avançar, voltar ou ir para uma posição, o cliente descarta o buffer, converte a posição em offset de bytes e abre uma nova requisição `Range: bytes=<offset>-`. A nova posição também é salva no Redis. Exemplo de saída:
+```text
+posição: 45.00s (Range: bytes=7938000-)
+2026/11/22 17:21:24 conexão #1: resume em 7938000 bytes (45.00s)
+2026/11/22 17:21:24 stream aberto: status=206 range=bytes=7938000-
+```
+
+#### Reconexão
+Se a conexão cair (ou for fechada com `-drop-after`), o cliente reconecta a partir do último byte recebido, e não da posição do player, de modo que os bytes que já estão no buffer não são baixados de novo:
+```text
+downloader: drop-after atingido (1024 KB) — fechando socket
+downloader: reconectando após drop (próximo offset=1048576)
+conexão #2: resume em 1048576 bytes (5.94s)
 ```
 
 ### Validação com N clientes
@@ -330,7 +380,7 @@ spotcin-audio/
 Onde `<uuid>` é o mesmo `id` do registro correspondente no catálogo.
 
 ### 3. Posições de reprodução (Redis)
-As posições são escritas com frequência (a cada avanço de reprodução), exigem baixa latência e têm vida curta, por isso ficam no **Redis**. A conexão já é feita e verificada no health-check; as rotas de leitura e escrita estão planejadas.
+As posições são escritas com frequência (a cada avanço de reprodução), exigem baixa latência e têm vida curta, por isso ficam no **Redis**. A leitura e a escrita são feitas pelas rotas `GET` e `PUT /api/playback/{id}`, identificando o usuário pelo cabeçalho `X-User-ID`.
 
 A chave tem o formato `playback:<user_id>:<track_id>` e o valor tem o formato `{"posicao_seg": 123.4, "atualizado_em": "..."}`, com TTL configurável.
 
@@ -369,9 +419,9 @@ O protocolo de transmissão escolhido é HTTP/1.1 com suporte a requisições Ra
 | GET | `/health/ready` | Estado do PostgreSQL, Redis e Garage | Implementada |
 | GET | `/api/songs` | Catálogo | Implementada |
 | GET | `/api/stream/{id}` | Áudio, com suporte a Range | Implementada |
-| GET | `/api/songs/{id}` | Metadados de uma faixa | Planejada |
-| GET | `/api/playback/{id}` | Última posição de reprodução | Planejada |
-| PUT | `/api/playback/{id}` | Salva a posição de reprodução | Planejada |
+| GET | `/api/songs/{id}` | Metadados de uma faixa | Implementada |
+| GET | `/api/playback/{id}` | Última posição de reprodução | Implementada |
+| PUT | `/api/playback/{id}` | Salva a posição de reprodução | Implementada |
 
 **OBS:** `{id}` é o UUID v4 da faixa.
 

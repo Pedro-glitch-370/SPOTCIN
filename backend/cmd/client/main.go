@@ -3,28 +3,33 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 )
 
+const ajudaComandos = "comandos: p (pausar/retomar) | a <seg> (avançar) | v <seg> (voltar) | i <seg> (ir para) | q (sair)"
+
 func main() {
 	var (
-		base    = flag.String("base", "http://localhost:8080", "URL do backend")
-		songID  = flag.String("song", "", "ID da música (se vazio, lista e pede escolha)")
-		start   = flag.Float64("start", -1, "posição inicial em segundos")
-		userID  = flag.String("user", "", "user_id (default: gera UUID v4)")
-		minBuf  = flag.Int64("min", 64*1024, "buffer mínimo (bytes)")
-		maxBuf  = flag.Int64("max", 512*1024, "buffer máximo (bytes)")
-		jitter  = flag.Duration("jitter", 50*1000*1000, "jitter do consumo")
+		base      = flag.String("base", "http://localhost:8080", "URL do backend")
+		songID    = flag.String("song", "", "ID da música (se vazio, lista e pede escolha)")
+		start     = flag.Float64("start", -1, "posição inicial em segundos")
+		userID    = flag.String("user", "", "user_id (default: gera UUID v4)")
+		minBuf    = flag.Int64("min", 64*1024, "buffer mínimo (bytes)")
+		maxBuf    = flag.Int64("max", 512*1024, "buffer máximo (bytes)")
+		jitter    = flag.Duration("jitter", 50*1000*1000, "jitter do consumo")
 		dropAfter = flag.Int64("drop-after", 0, "fecha o socket após N bytes baixados")
 	)
 	flag.Parse()
@@ -51,6 +56,9 @@ func main() {
 	meta, err := api.GetSong(ctx, id)
 	if err != nil {
 		log.Fatalf("metadados: %v", err)
+	}
+	if meta.Duration <= 0 || meta.Size <= 0 {
+		log.Fatalf("metadados sem duração ou tamanho válidos (duration=%d size=%d)", meta.Duration, meta.Size)
 	}
 	bitrate := float64(meta.Size) / float64(meta.Duration)
 	fmt.Printf("faixa: %s (%s) duration=%ds size=%dB bitrate=%.0f B/s\n",
@@ -84,7 +92,18 @@ func main() {
 
 	buf := NewBuffer(int(*minBuf), int(*maxBuf))
 	player := NewPlayer(buf, bitrate, *jitter)
-	player.posBytes = offset
+	player.Posicionar(offset, 0)
+
+	ctrl := &controle{
+		ctx:       ctx,
+		base:      *base,
+		id:        id,
+		meta:      meta,
+		buf:       buf,
+		player:    player,
+		dropAfter: *dropAfter,
+	}
+	ctrl.iniciar(offset, 0)
 
 	// o player é em goroutine
 	playerDone := make(chan struct{})
@@ -100,66 +119,174 @@ func main() {
 		close(playerDone)
 	}()
 
-	// downloader com loop de reconexão
-	downloaderDone := make(chan struct{})
-	go func() {
-		defer close(downloaderDone)
-		defer buf.Close() // sinaliza fim de arquivo pro player quando desistir
-
-		totalDownloaded := int64(0)
-		connections := 0
-		for {
-			// Se o player já acabou, não reconecta mais
-			if player.PosBytes() >= meta.Size {
-				log.Printf("downloader: player consumiu tudo (%d/%d bytes), encerrando",
-					player.PosBytes(), meta.Size)
-				return
-			}
-
-			// offset de retomada, onde o player tá
-			resumeOffset := player.PosBytes()
-			log.Printf("conexão #%d: resume em %d bytes (%.2fs)",
-				connections+1, resumeOffset, BytesToPos(resumeOffset, meta))
-
-			n, err := runDownloader(ctx, *base, id, resumeOffset, buf, *dropAfter, nil)
-			connections++
-			totalDownloaded += n
-
-			// fim normal, sem drop
-			if err == nil && *dropAfter == 0 {
-				return 
-			}
-
-			// erro real
-			if err != nil && err != io.EOF && ctx.Err() == nil {
-				if strings.Contains(err.Error(), "416") {
-					log.Printf("downloader: 416, fim do arquivo, encerrando")
-					return
-				}
-				log.Printf("downloader: reconectando após erro: %v", err)
-				time.Sleep(500 * time.Millisecond)
-				continue
-			}
-
-			// drop proposital, reconecta se ainda não consumiu tudo
-			if *dropAfter > 0 {
-				log.Printf("downloader: reconectando após drop (total baixado=%d KB)", totalDownloaded/1024)
-				time.Sleep(200 * time.Millisecond)
-				continue
-			}
-			return
-		}
-	}()
+	fmt.Println(ajudaComandos)
+	go lerComandos(ctrl, api, cancel)
 
 	// espera o player terminar o arquivo ou sair
 	<-playerDone
+	ctrl.parar()
 	cancel()
-	<-downloaderDone
 
 	// PUT final
 	finalPos := BytesToPos(player.PosBytes(), meta)
 	api.PutPlayback(context.Background(), id, finalPos)
 	fmt.Printf("fim: posição final %.2fs (%d bytes)\n", finalPos, player.PosBytes())
+}
+
+type controle struct {
+	mu        sync.Mutex
+	ctx       context.Context
+	base      string
+	id        string
+	meta      *SongMeta
+	buf       *Buffer
+	player    *Player
+	dropAfter int64
+	cancelar  context.CancelFunc
+	feito     <-chan struct{}
+	encerrado bool
+}
+
+func (c *controle) iniciar(offset int64, gen int) {
+	c.cancelar, c.feito = iniciarDownload(c.ctx, c.base, c.id, offset, gen, c.meta, c.buf, c.dropAfter)
+}
+
+func (c *controle) irPara(posSeg float64) (int64, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.encerrado {
+		return 0, false
+	}
+	off := PosToBytes(posSeg, c.meta)
+	c.cancelar()
+	gen := c.buf.Reiniciar()
+	<-c.feito
+	c.player.Posicionar(off, gen)
+	c.iniciar(off, gen)
+	return off, true
+}
+
+func (c *controle) parar() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.encerrado = true
+	c.cancelar()
+	c.buf.Close()
+	<-c.feito
+}
+
+func lerComandos(c *controle, api *APIClient, sair func()) {
+	sc := bufio.NewScanner(os.Stdin)
+	for sc.Scan() {
+		campos := strings.Fields(strings.ToLower(sc.Text()))
+		if len(campos) == 0 {
+			continue
+		}
+		atual := BytesToPos(c.player.PosBytes(), c.meta)
+
+		switch campos[0] {
+		case "p":
+			if c.player.AlternarPausa() {
+				fmt.Printf("pausado em %.2fs\n", atual)
+			} else {
+				fmt.Printf("retomado em %.2fs\n", atual)
+			}
+
+		case "a", "v", "i":
+			if len(campos) < 2 {
+				fmt.Println("uso: a <seg> | v <seg> | i <seg>")
+				continue
+			}
+			seg, err := strconv.ParseFloat(campos[1], 64)
+			if err != nil || seg < 0 {
+				fmt.Println("valor inválido")
+				continue
+			}
+			alvo := seg
+			switch campos[0] {
+			case "a":
+				alvo = atual + seg
+			case "v":
+				alvo = atual - seg
+			}
+			alvo = math.Max(0, math.Min(alvo, float64(c.meta.Duration)))
+
+			off, ok := c.irPara(alvo)
+			if !ok {
+				return
+			}
+			fmt.Printf("posição: %.2fs (Range: bytes=%d-)\n", alvo, off)
+			if err := api.PutPlayback(context.Background(), c.id, alvo); err != nil {
+				log.Printf("PUT playback: %v", err)
+			}
+
+		case "q":
+			sair()
+			return
+
+		default:
+			fmt.Println(ajudaComandos)
+		}
+	}
+}
+
+func iniciarDownload(
+	parent context.Context,
+	base, id string,
+	offset int64,
+	gen int,
+	meta *SongMeta,
+	buf *Buffer,
+	dropAfter int64,
+) (context.CancelFunc, <-chan struct{}) {
+	ctx, cancel := context.WithCancel(parent)
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		next := offset
+		connections := 0
+		for {
+			if next >= meta.Size {
+				log.Printf("downloader: arquivo completo (%d/%d bytes), encerrando", next, meta.Size)
+				buf.Finalizar(gen)
+				return
+			}
+
+			connections++
+			log.Printf("conexão #%d: resume em %d bytes (%.2fs)",
+				connections, next, BytesToPos(next, meta))
+
+			n, err := runDownloader(ctx, base, id, next, gen, buf, dropAfter)
+			next += n
+
+			if ctx.Err() != nil || errors.Is(err, errBufferDescartado) {
+				return
+			}
+
+			espera := 200 * time.Millisecond
+			if err != nil {
+				if strings.Contains(err.Error(), "416") {
+					log.Printf("downloader: 416, fim do arquivo, encerrando")
+					buf.Finalizar(gen)
+					return
+				}
+				log.Printf("downloader: reconectando após erro: %v", err)
+				espera = 500 * time.Millisecond
+			} else if next < meta.Size {
+				log.Printf("downloader: reconectando após drop (próximo offset=%d)", next)
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(espera):
+			}
+		}
+	}()
+
+	return cancel, done
 }
 
 // escolherMusica lista os áudios e lê o input do usuário
@@ -213,9 +340,9 @@ func runDownloader(
 	ctx context.Context,
 	base, id string,
 	offsetBytes int64,
+	gen int,
 	buf *Buffer,
 	dropAfter int64,
-	onProgress func(total int64),
 ) (int64, error) {
 	client := &http.Client{}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
@@ -248,7 +375,9 @@ func runDownloader(
 
 		n, err := resp.Body.Read(chunk)
 		if n > 0 {
-			buf.Write(chunk[:n])
+			if _, werr := buf.Write(chunk[:n], gen); werr != nil {
+				return total, werr
+			}
 			total += int64(n)
 			if total%(1<<20) == 0 {
 				log.Printf("downloader: %d KB baixados (conexão), buffer=%d KB", total/1024, buf.Len()/1024)
