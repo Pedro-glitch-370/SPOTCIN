@@ -4,13 +4,20 @@ import (
 	"SPOTCIN/backend/internal/database"
 	"SPOTCIN/backend/internal/routes"
 	"SPOTCIN/backend/internal/services"
+	"context"
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
 
 	_ "github.com/joho/godotenv/autoload"
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
+	
 	db, err := database.Open()
 	if err != nil {
 		log.Fatalf("abrindo DB: %v", err)
@@ -22,6 +29,10 @@ func main() {
 
 	if err := database.OpenGarage(); err != nil {
 		log.Fatalf("abrindo Garage: %v", err)
+	}
+	
+	if err := services.SeedGarage(context.Background()); err != nil {
+		log.Printf("seed garage falhou: %v", err)
 	}
 
 	if err := services.ScanDatabase(db); err != nil {

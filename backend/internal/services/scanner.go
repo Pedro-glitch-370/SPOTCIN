@@ -76,12 +76,17 @@ func syncSong(db *gorm.DB, entry os.DirEntry) error {
 		return err
 	}
 
+	duration, err := extractDuration(absPath, mime)
+	if err != nil {
+		log.Printf("duração de %s: %v (seguindo com 0)", relPath, err)
+		duration = 0
+	}
+
 	var existing models.Song
 	err = db.Where("path = ?", relPath).First(&existing).Error
 
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
-		// arquivo novo, ainda não indexado
 		return db.Create(&models.Song{
 			ID:       uuid.NewString(),
 			Path:     relPath,
@@ -90,6 +95,7 @@ func syncSong(db *gorm.DB, entry os.DirEntry) error {
 			Size:     info.Size(),
 			ModTime:  info.ModTime(),
 			MimeType: mime,
+			Duration: duration,
 		}).Error
 
 	case err != nil:
@@ -100,6 +106,7 @@ func syncSong(db *gorm.DB, entry os.DirEntry) error {
 		existing.Size = info.Size()
 		existing.ModTime = info.ModTime()
 		existing.MimeType = mime
+		existing.Duration = duration
 		return db.Save(&existing).Error
 
 	default:

@@ -1,4 +1,4 @@
-# SPOTCIN (Equipe 3)
+# SPOTCIN (Equipe 3) - Streaming de Áudio Distribuído
 
 ## Descrição do Projeto
 SPOTCIN é um sistema distribuído de streaming de áudio MP3/WAV que utiliza HTTP Streaming com requisições Range. A aplicação conta com um catálogo de áudios, onde é possível escolher um áudio e iniciar, pausar ou avançar até determinado momento.
@@ -180,6 +180,55 @@ Content-Length: 33
 invalid range: failed to overlap
 ```
 
+## Entrega 2
+Quanto aos logs operacionais, todas as requisições HTTP viraram linhas JSON no stdout do servidor. Além disso, os áudios passaram a viver no Garage, o que tornou o disco local apenas uma fonte de seed. Com isso, o backend tornou-se stateless de verdade. Por fim, foram implementadas as rotas de playback com o Redis e o cliente de terminal.
+
+### Salvar Posição de Reprodução
+Substitua `<ID>` por um `id` retornado pelo catálogo:
+
+Windows (PowerShell):
+```powershell
+curl.exe -sS -X PUT -H "X-User-ID: test-1" -H "Content-Type: application/json" `
+  --data-raw "{\"posicao_seg\": 60}" http://localhost:8080/api/playback/<ID>
+```
+Linux/macOS:
+```bash
+curl -sS -X PUT -H "X-User-ID: test-1" -H "Content-Type: application/json" -d '{"posicao_seg": 60}' http://localhost:8080/api/playback/<ID>
+```
+Exemplo de saída esperada no terminal do servidor:
+```json
+{"time":"2026-11-21T11:25:03.3969538-03:00","level":"INFO","msg":"http_request","method":"PUT","path":"/api/playback/feadc394-bc6f-40e1-835c-dd9fbdda4f15","status":204,"duration_ms":7,"bytes":0,"request_id":"ec5db4fd-4103-4e84-ac93-ebd6328d2e21"}
+```
+
+### Resgatar Última Posição de Reprodução
+Substitua `<ID>` por um `id` retornado pelo catálogo:
+Windows (PowerShell):
+```powershell
+curl.exe -sS -H "X-User-ID: test-1" http://localhost:8080/api/playback/<ID>
+```
+Linux/macOS:
+```bash
+curl -sS -H "X-User-ID: test-1" http://localhost:8080/api/playback/<ID>
+```
+O comando irá reetornar imediatamente:
+```json
+{"track_id":"feadc394-bc6f-40e1-835c-dd9fbdda4f15","posicao_seg":60,"atualizado_em":"2026-11-21T14:25:03.3941125Z"}
+```
+Exemplo de saída esperada no terminal do servidor:
+```json
+{"time":"2026-11-21T11:26:19.3842379-03:00","level":"INFO","msg":"http_request","method":"GET","path":"/api/playback/feadc394-bc6f-40e1-835c-dd9fbdda4f15","status":200,"duration_ms":1,"bytes":116,"request_id":"4f89f13b-216f-4479-89e2-f769396ca759"}
+```
+
+### Validação com N clientes
+Para verificar a concorrência, faça:
+```bash
+cd SPOTCIN
+./scripts/load.sh
+```
+O script dispara 4 clientes em paralelo (2 por música, com -user e drops distintos). Os logs do servidor mostram que eles possuem request_id distintos, status:206, range diferentes e durações sobrepostas.
+
+**OBS**: O cliente ainda não toca áudio de verdade. Ele apenas simula a reprodução consumindo do buffer conforme a taxa do bit rate real junto com um jitter. O objetivo foi tornar o buffer e os requisitos da entrega observáveis no terminal, pois o produto final usará <audio> no frontend.
+
 ## Framework de Streaming
 Foram consideradas duas opções sugeridas: HTTP Streaming e WebSockets.
 
@@ -280,7 +329,7 @@ spotcin-audio/
 ```
 Onde `<uuid>` é o mesmo `id` do registro correspondente no catálogo.
 
-### 3. Posições de reprodução (Redis) — planejado
+### 3. Posições de reprodução (Redis)
 As posições são escritas com frequência (a cada avanço de reprodução), exigem baixa latência e têm vida curta, por isso ficam no **Redis**. A conexão já é feita e verificada no health-check; as rotas de leitura e escrita estão planejadas.
 
 A chave tem o formato `playback:<user_id>:<track_id>` e o valor tem o formato `{"posicao_seg": 123.4, "atualizado_em": "..."}`, com TTL configurável.
@@ -386,7 +435,7 @@ Faixa inexistente:
 HTTP/1.1 404 Not Found
 ```
 
-### GET /api/songs/{id} (planejada)
+### GET /api/songs/{id}
 Response 200:
 ```json
 {
@@ -400,7 +449,7 @@ Response 200:
 ```
 Response 404: `{"erro":"track_nao_encontrada"}`
 
-### GET /api/playback/{id} (planejada)
+### GET /api/playback/{id}
 Response 200:
 ```json
 {
@@ -411,7 +460,7 @@ Response 200:
 ```
 Response 404: `{"erro":"posicao_nao_encontrada"}`
 
-### PUT /api/playback/{id} (planejada)
+### PUT /api/playback/{id}
 Request:
 ```json
 {"posicao_seg": 123.4}

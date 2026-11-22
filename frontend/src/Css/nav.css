@@ -1,0 +1,99 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700&display=swap');
+
+nav {
+    background-color: #2f313b2f;
+    padding: 20px 40px; 
+    display: flex;
+    align-items: center; 
+    justify-content: space-between; 
+    border-bottom: solid #e03939 2px;
+    width: 100%;
+    margin-top: 0%;
+}
+
+.nav_bar {
+    display: flex;
+    align-items: center; /* Centraliza verticalmente os blocos de botões */
+    gap: 200px; 
+    font-family: 'Poppins', sans-serif;
+}
+
+
+.botoes_nav {
+    display: flex;
+    align-items: center; /* Garante que os links fiquem alinhados no meio */
+    gap: 80px; 
+}
+
+.log_cad {
+    display: flex;
+    align-items: center; /* ISSO AQUI vai alinhar o texto do Login com o botão de Cadastro */
+    gap: 50px; 
+    margin-right: 20px;
+}
+
+.cadastro {
+    border: solid 2px #e03939;
+    text-align: center;
+    width: 135px;
+    background-color: transparent;
+    color: #e03939;               
+    padding: 2px;   
+    border-radius: 20px;                   
+    cursor: pointer;               
+    display: inline-block;   
+    transition: 0.2s;              
+}
+
+.cadastro:hover {
+    scale: 1.03;
+    background-color: #e03939;       
+    color: #00112b                
+}
+
+nav a, nav p {
+    text-decoration: none;
+    color: #ffcbcb;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+nav .Login{
+    transition: 0.2s;
+    border-bottom: 2px solid transparent; /* Evita que o elemento pule ao ganhar borda */
+    transition: scale 0.3s ease, border-color 0.3s ease;
+}
+
+nav .Login:hover{
+    scale: 1.03;
+    border-bottom: solid #e03939 2px;
+}
+
+.LogoNav{
+    width: 150px;
+    height: auto;
+    transition: 0.2s;
+}
+
+.LogoNav:hover{
+    scale: 1.03;
+}
+
+.Home{
+    margin-left: 40px;
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    
+}
+
+input{
+    width: 40%;
+    padding: 12px;
+    border: solid 2px #5e616d2f;
+    border-radius: 40px;
+    background-color: #5e616d2f;
+    color: aliceblue;
+    font-family: 'Poppins';
+    
+}

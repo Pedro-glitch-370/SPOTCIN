@@ -1,0 +1,29 @@
+.painel{
+    display: flex;
+    justify-content: center;
+    flex-direction: row;
+    align-items: center;
+    gap: 100px;
+    margin-top: 5%;
+    background-color: #2f313b2f;
+    padding: 20px;
+    width: 50%;
+    border-radius: 40px;
+}
+
+.Logo{
+    border: solid;
+    border-color: #2f313b;
+    border-radius: 40px;
+    width: 200px;
+    height: 200px;
+}
+.Titulo{
+    color: #e03939;
+    font-size: 56px;
+}
+
+.Sub{
+    margin-top: -15%;
+    color: aliceblue;
+}

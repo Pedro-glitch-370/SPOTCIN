@@ -1,15 +1,18 @@
 package handlers
 
 import (
+	"SPOTCIN/backend/internal/database"
+	"SPOTCIN/backend/internal/services"
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
+	"time"
 
-	"SPOTCIN/backend/internal/services"
-
+	"github.com/minio/minio-go/v7"
 	"gorm.io/gorm"
 )
 
@@ -28,12 +31,13 @@ func ListSongs(db *gorm.DB) http.HandlerFunc {
 	}
 }
 
-// StreamSong serve o áudio pelo ID. ServeContent cuida de Range (206).
+// StreamSong serve o áudio pelo ID, lendo do Garage.
+// ServeContent cuida de Range (206 e 416).
 func StreamSong(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 
-		path, mime, err := services.GetSongPath(db, id)
+		key, mime, err := services.GetSongPath(db, id)
 		if err != nil {
 			if errors.Is(err, services.ErrSongNotFound) {
 				http.Error(w, "not found", http.StatusNotFound)
@@ -43,32 +47,66 @@ func StreamSong(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 
-		// valida path traversal contra AudioDir
-		absClean, err := filepath.Abs(path)
+		// rejeita chaves com ".."
+		if strings.Contains(key, "..") {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		obj, err := database.GarageClient.GetObject(ctx, database.GarageBucket, key, minio.GetObjectOptions{})
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		audioDirAbs, _ := filepath.Abs(services.AudioDir)
-		if !strings.HasPrefix(absClean, audioDirAbs+string(os.PathSeparator)) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
+		defer obj.Close()
 
-		f, err := os.Open(absClean)
+		info, err := obj.Stat()
 		if err != nil {
-			http.Error(w, "not found", http.StatusNotFound)
+			resp := minio.ToErrorResponse(err)
+			if resp.Code == "NoSuchKey" {
+				http.Error(w, "not found", http.StatusNotFound)
+				return
+			}
+			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		defer f.Close()
 
-		fi, err := f.Stat()
+		buf, err := io.ReadAll(obj)
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", mime)
-		http.ServeContent(w, r, fi.Name(), fi.ModTime(), f)
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		http.ServeContent(w, r, key, info.LastModified, bytes.NewReader(buf))
+	}
+}
+
+// GetSong retorna metadados de uma faixa em JSON de acordo com o contrato definido
+func GetSong(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+
+		song, err := services.GetSongByID(db, id)
+		if err != nil {
+			if errors.Is(err, services.ErrSongNotFound) {
+				writeJSON(w, http.StatusNotFound, map[string]string{"erro": "track_nao_encontrada"})
+				return
+			}
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"erro": "internal_error"})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":        song.ID,
+			"title":     song.Title,
+			"artist":    song.Artist,
+			"duration":  song.Duration,
+			"size":      song.Size,
+			"mime_type": song.MimeType,
+		})
 	}
 }
