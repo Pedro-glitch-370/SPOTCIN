@@ -242,6 +242,7 @@ func iniciarDownload(
 	ctx, cancel := context.WithCancel(parent)
 	done := make(chan struct{})
 
+	// downloader com loop de reconexão
 	go func() {
 		defer close(done)
 
@@ -250,7 +251,7 @@ func iniciarDownload(
 		for {
 			if next >= meta.Size {
 				log.Printf("downloader: arquivo completo (%d/%d bytes), encerrando", next, meta.Size)
-				buf.Finalizar(gen)
+				buf.Finalizar(gen) // sinaliza fim de arquivo pro player quando desistir
 				return
 			}
 
@@ -266,6 +267,7 @@ func iniciarDownload(
 			}
 
 			espera := 200 * time.Millisecond
+			// erro real
 			if err != nil {
 				if strings.Contains(err.Error(), "416") {
 					log.Printf("downloader: 416, fim do arquivo, encerrando")
@@ -275,6 +277,7 @@ func iniciarDownload(
 				log.Printf("downloader: reconectando após erro: %v", err)
 				espera = 500 * time.Millisecond
 			} else if next < meta.Size {
+				// drop proposital, reconecta se ainda não baixou tudo
 				log.Printf("downloader: reconectando após drop (próximo offset=%d)", next)
 			}
 
