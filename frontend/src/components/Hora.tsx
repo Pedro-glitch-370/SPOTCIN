@@ -13,11 +13,11 @@ function HoraAtual() {
   }, []);
 
   // 1. Formata a hora para mostrar na tela (ex: 22:19:05)
-  const horaFormatada = agora.toLocaleTimeString('pt-BR', {
+  /*const horaFormatada = agora.toLocaleTimeString('pt-BR', {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-  });
+  });*/
 
   // 2. Pega apenas a hora como número (0 a 23) para checar o período do dia
   const horaNumero = agora.getHours()

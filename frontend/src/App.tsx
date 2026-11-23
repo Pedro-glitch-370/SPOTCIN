@@ -1,8 +1,8 @@
 import './Css/App.css';
-import HoraAtual from './tsx/Hora';
-import Navbar from './tsx/Navbar';
+import HoraAtual from './components/Hora';
+import Navbar from './components/Navbar';
 import Cin from '../src/assets/Cin.png';
-import Playlist from './tsx/Playlist';
+import Playlist from './components/Playlist';
 
 function App() {
 
