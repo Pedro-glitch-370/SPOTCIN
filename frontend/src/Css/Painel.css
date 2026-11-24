@@ -1,14 +1,8 @@
 .painel{
     display: flex;
-    justify-content: center;
-    flex-direction: row;
-    align-items: center;
-    gap: 100px;
-    margin-top: 5%;
-    background-color: #2f313b2f;
-    padding: 20px;
-    width: 50%;
-    border-radius: 40px;
+    align-items: center; 
+    justify-content: space-between;
+    width: 100%;
 }
 
 .Logo{

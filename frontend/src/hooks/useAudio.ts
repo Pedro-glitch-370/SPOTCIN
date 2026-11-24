@@ -75,10 +75,20 @@ export function useAudio(src: string | null, initialPosition = 0) {
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
+
+    el.pause(); // para parar o áudio anterior, caso o usuário não dê pausa
+    el.removeAttribute("src"); // descarregar o áudio antigo
+    el.load();
+    setState({
+      currentTime: 0,
+      duration: 0,
+      buffered: 0,
+      playing: false,
+      loading: false,
+      error: null,
+    });
+
     if (!src) {
-      el.removeAttribute("src");
-      el.load();
-      setState({ currentTime: 0, duration: 0, buffered: 0, playing: false, loading: false, error: null });
       return;
     }
     el.src = src;
@@ -96,9 +106,13 @@ export function useAudio(src: string | null, initialPosition = 0) {
     return () => el.removeEventListener("loadedmetadata", onLoaded);
   }, [src, initialPosition]);
 
-  const play = useCallback(() => audioRef.current?.play().catch((e) => {
-    setState((s) => ({ ...s, error: `Falha ao reproduzir: ${e}` }));
-  }), []);
+  const play = useCallback(() => {
+    const el = audioRef.current;
+    if (!el || !el.src) return;
+    el.play().catch((e) => {
+      setState((s) => ({ ...s, error: `Falha ao reproduzir: ${e}` }));
+    });
+  }, []);
 
   const pause = useCallback(() => audioRef.current?.pause(), []);
 

@@ -38,22 +38,35 @@ export function Player({ song, initialPosition }: Props) {
 
       {error && <div className="error">{error}</div>}
 
-      <div className="progress-wrap">
-        <div className="buffer-bar" style={{ width: `${bufferPct}%` }} />
-        <input
-          type="range"
-          min={0}
-          max={duration || 0}
-          step={0.1}
-          value={currentTime}
-          onChange={(e) => seek(Number(e.target.value))}
-          className="progress"
-        />
+      <div className="bar-row">
+        <span className="bar-label">Reprodução</span>
+        <div className="bar-track">
+          <input
+            type="range"
+            min={0}
+            max={duration || 0}
+            step={0.1}
+            value={currentTime}
+            onChange={(e) => seek(Number(e.target.value))}
+            className="progress"
+          />
+          </div>
       </div>
 
       <div className="time-row">
         <span>{fmt(currentTime)}</span>
         <span>{fmt(duration)}</span>
+      </div>
+
+      <div className="bar-row">
+        <span className="bar-label">Buffer</span>
+        <div className="bar-track">
+          <div className="buffer-bar" style={{ width: `${bufferPct}%` }} />
+        </div>
+      </div>
+      <div className="time-row">
+        <span>{fmt(0)}</span>
+        <span>{fmt(buffered)}</span>
       </div>
 
       <div className="controls">
