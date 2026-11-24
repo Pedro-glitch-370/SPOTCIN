@@ -40,19 +40,19 @@ export function SongList({ selectedId, onSelect }: Props) {
   if (songs.length === 0) return <p className="muted">Catálogo vazio.</p>;
 
   return (
-    <ul className="song-list">
+    <div className="song-grid">
       {songs.map((s) => (
-        <li
+        <div
           key={s.id}
-          className={s.id === selectedId ? "selected" : ""}
+          className={`song-card ${s.id === selectedId ? "selected" : ""}`}
           onClick={() => onSelect(s)}
         >
           <div className="song-title">{s.title}</div>
           <div className="song-meta">
-            {s.artist} · {s.mime_type} · {Math.floor(s.duration)}s
+            {s.artist} · {Math.floor(s.duration)}s
           </div>
-        </li>
+        </div>
       ))}
-    </ul>
+    </div>
   );
 }

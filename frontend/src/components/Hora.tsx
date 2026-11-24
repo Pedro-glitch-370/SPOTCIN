@@ -36,9 +36,9 @@ function HoraAtual() {
   }
 
   return (
-    <div className='Texto'>
-      <h1 className='Titulo'>{titulo}</h1>
-      <h2 className='Sub'>{saudacao}</h2>
+    <div>
+      <h1 className="greeting">{titulo}</h1>
+      <h2 className="subtitle">{saudacao}</h2>
     </div>
 
   );

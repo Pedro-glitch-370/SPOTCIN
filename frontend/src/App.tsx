@@ -2,7 +2,6 @@ import './Css/App.css';
 import HoraAtual from './components/Hora';
 import Navbar from './components/Navbar';
 import Cin from '../src/assets/Cin.png';
-import Playlist from './components/Playlist';
 import { useEffect, useState } from 'react';
 import { api } from './services/api';
 import { ApiError, type Song } from './types/song';
@@ -39,25 +38,41 @@ export function App() {
   }, [selected]);
 
   return (
-    <div className='app'>
+    <div className="app">
+      <Navbar />
+      
+      <article className="painel">
 
-      <Navbar></Navbar>
-      <article className='painel'>
-        <section>
-          <img src={Cin} alt="Logo do cin" className='Logo' />
-          <HoraAtual></HoraAtual>
-          <Playlist></Playlist>
-        </section>
+        <main className="main-area">
+          <header className="top-bar">
+            <section className="logo-message">
+              <img src={Cin} alt="Logo do cin" className='logo' />
+              <HoraAtual></HoraAtual>
+            </section>
+          </header>
+
+          <section className="catalog-section">
+            <h2>Catálogo</h2>
+            <SongList selectedId={selected?.id ?? null} onSelect={setSelected} />
+          </section>
+        </main>
+
         <aside className="sidebar">
           <HealthIndicator />
-          <h2>Catálogo</h2>
-          <SongList selectedId={selected?.id ?? null} onSelect={setSelected} />
-          <section className="content">
+          <section className="player-section">
             <Player song={selected} initialPosition={initialPos} />
+          </section>
+          
+          <section className="favorites-section">
+            <section className="player">
+              <h2>Favoritos</h2>
+              <p className="muted">Em breve...</p>
+            </section>
           </section>
         </aside>
       </article>
+
       <ErrorToast message={toast} onClose={() => setToast(null)} />
     </div>
-  )
+  );
 }

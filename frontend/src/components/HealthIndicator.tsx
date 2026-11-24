@@ -36,8 +36,12 @@ export function HealthIndicator() {
 
   return (
     <div className={`health ${ok ? "ok" : "bad"}`}>
-      <span className="dot" />
-      {offline ? "backend offline" : ok ? "sistema ok" : "sistema degradado"}
+      <div className="health-main">
+        <span className="dot" />
+        <span className="health-text">
+          {offline ? "backend offline" : ok ? "Sistema Ok" : "Sistema Degradado"}
+        </span>
+      </div>
       {health?.checks && !ok && (
         <ul className="checks">
           {Object.entries(health.checks).map(([k, v]) => (
