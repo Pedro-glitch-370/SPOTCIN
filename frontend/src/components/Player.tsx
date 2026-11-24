@@ -6,6 +6,7 @@ import { api } from "../services/api";
 interface Props {
   song: Song | null;
   initialPosition: number; // segundos
+  onClose: () => void;
 }
 
 function fmt(sec: number): string {
@@ -15,7 +16,7 @@ function fmt(sec: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export function Player({ song, initialPosition }: Props) {
+export function Player({ song, initialPosition, onClose }: Props) {
   const src = song ? api.streamUrl(song.id) : null;
   const { currentTime, duration, buffered, playing, loading, error, play, pause, seek } =
     useAudio(src, initialPosition);
@@ -23,7 +24,7 @@ export function Player({ song, initialPosition }: Props) {
   usePlayback(song?.id ?? null, currentTime, playing);
 
   if (!song) {
-    return <div className="player muted">Selecione uma faixa para começar.</div>;
+    return <div className="player-empty">Selecione uma faixa para começar.</div>;
   }
 
   const bufferPct = duration > 0 ? (buffered / duration) * 100 : 0;
@@ -31,6 +32,9 @@ export function Player({ song, initialPosition }: Props) {
 
   return (
     <div className="player">
+      <button className="close-btn" onClick={onClose} aria-label="Fechar player">
+        ✕
+      </button>
       <h2>{song.title}</h2>
       <div className="muted">
         {song.artist} · {song.mime_type}

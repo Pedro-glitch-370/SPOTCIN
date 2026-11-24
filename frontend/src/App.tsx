@@ -47,7 +47,7 @@ export function App() {
           <header className="top-bar">
             <section className="logo-message">
               <img src={Cin} alt="Logo do cin" className='logo' />
-              <HoraAtual></HoraAtual>
+              <HoraAtual />
             </section>
           </header>
 
@@ -60,14 +60,11 @@ export function App() {
         <aside className="sidebar">
           <HealthIndicator />
           <section className="player-section">
-            <Player song={selected} initialPosition={initialPos} />
-          </section>
-          
-          <section className="favorites-section">
-            <section className="player">
-              <h2>Favoritos</h2>
-              <p className="muted">Em breve...</p>
-            </section>
+            <Player
+              song={selected}
+              initialPosition={initialPos}
+              onClose={() => setSelected(null)}
+            />
           </section>
         </aside>
       </article>

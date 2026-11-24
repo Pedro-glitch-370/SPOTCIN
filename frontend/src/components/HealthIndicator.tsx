@@ -39,7 +39,7 @@ export function HealthIndicator() {
       <div className="health-main">
         <span className="dot" />
         <span className="health-text">
-          {offline ? "backend offline" : ok ? "Sistema Ok" : "Sistema Degradado"}
+          {offline ? "Backend Offline" : ok ? "Sistema Ok" : "Sistema Degradado"}
         </span>
       </div>
       {health?.checks && !ok && (
