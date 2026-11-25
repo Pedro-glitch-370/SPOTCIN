@@ -16,16 +16,16 @@ export function App() {
   const [initialPos, setInitialPos] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
-  // valida o token
+  // qualquer 401 em qualquer chamada ativa o logout
   useEffect(() => {
-    if (!authed) return;
-    api.me().catch((e) => {
-      if (e instanceof ApiError && e.kind === "unauthorized") {
-        clearToken();
-        setAuthed(false);
-      }
-    });
-  }, [authed]);
+    const onUnauthorized = () => {
+      setAuthed(false);
+      setSelected(null); // fecha o player
+      setToast("Sessão expirada. Faça login novamente.");
+    };
+    window.addEventListener("spotcin:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("spotcin:unauthorized", onUnauthorized);
+  }, []);
 
   // quando escolhe uma faixa, busca a posição salva no Redis
   useEffect(() => {

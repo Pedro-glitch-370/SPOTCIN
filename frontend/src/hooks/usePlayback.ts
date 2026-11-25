@@ -14,10 +14,12 @@ export function usePlayback(songId: string | null, currentTime: number, playing:
     lastPutRef.current = now;
 
     api.putPlayback(songId, currentTime).catch((e) => {
-      if (e instanceof ApiError && e.kind === "network") {
+      if (e instanceof ApiError && e.kind === "unauthorized") {
+        return;
+      } else if (e instanceof ApiError && e.kind === "network") {
         console.warn("PUT playback falhou (rede):", e.message);
       } else {
-        console.warn("PUT playback falhou:", e);
+        console.warn("PUT playback falhou:", e instanceof ApiError ? e.message : e);
       }
     });
   }, [songId, currentTime, playing]);

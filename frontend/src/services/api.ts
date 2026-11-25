@@ -36,6 +36,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (resp.status === 401) {
     clearToken();
+    // avisar ao app que vai deslogar
+    if (!path.startsWith("/api/auth/")) {
+      window.dispatchEvent(new Event("spotcin:unauthorized"));
+    }
     throw new ApiError("unauthorized", "Sessão expirada. Faça login novamente.", 401);
   }
 
@@ -65,8 +69,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),
-
-  me: () => request<{ id: string; email: string }>("/api/auth/me"),
   
   // catálogo e stream
   listSongs: () => request<Song[]>("/api/songs"),
