@@ -26,7 +26,7 @@ func Open() (*gorm.DB, error) {
 		return nil, errors.New("DATABASE_URL não definida")
 	}
 
-	if err := db.AutoMigrate(&models.Song{}); err != nil {
+	if err := db.AutoMigrate(&models.Song{}, &models.User{}); err != nil {
 		return nil, err
 	}
 

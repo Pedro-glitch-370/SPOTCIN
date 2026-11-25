@@ -7,15 +7,16 @@ import (
 
 	"gorm.io/gorm"
 
+	"SPOTCIN/backend/internal/middleware"
 	"SPOTCIN/backend/internal/services"
 )
 
 // GetPlayback responde com a posição salva pro (user_id, track_id)
 func GetPlayback(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Header.Get("X-User-ID")
+		userID := middleware.UserIDFromContext(r.Context())
 		if userID == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "user_id_ausente"})
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"erro": "nao_autenticado"})
 			return
 		}
 
@@ -37,9 +38,9 @@ func GetPlayback(db *gorm.DB) http.HandlerFunc {
 // PutPlayback valida a faixa no postgre, valida o body e grava no Redis
 func PutPlayback(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Header.Get("X-User-ID")
+		userID := middleware.UserIDFromContext(r.Context())
 		if userID == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"erro": "user_id_ausente"})
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"erro": "user_id_ausente"})
 			return
 		}
 
