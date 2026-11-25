@@ -97,3 +97,31 @@ input{
     font-family: 'Poppins';
     
 }
+
+/* Responsividade da Navbar */
+@media (max-width: 900px) {
+    nav {
+        padding: 15px 20px;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+
+    .nav_bar {
+        display: none;
+    }
+
+    .Home {
+        margin-left: 0;
+    }
+
+    .LogoNav {
+        width: 100px;
+    }
+
+    input {
+        width: 100%;
+        max-width: 200px;
+        padding: 10px;
+        box-sizing: border-box;
+    }
+}
