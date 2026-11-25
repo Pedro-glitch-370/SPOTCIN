@@ -2,18 +2,17 @@ import HoraAtual from './components/Hora';
 import { Navbar } from './components/Navbar';
 import Cin from '../src/assets/Cin.png';
 import { useEffect, useState } from 'react';
-import { api, clearToken, getToken } from "./services/api";
-import { ApiError, type Song } from './types/song';
+import { clearToken, getToken } from "./services/api";
 import { HealthIndicator } from './components/HealthIndicator';
 import { SongList } from './components/SongList';
 import { Player } from './components/Player';
 import { ErrorToast } from './components/ErrorToast';
 import { AuthForm } from './components/AuthForm';
+import type { Song } from './types/song';
 
 export function App() {
   const [authed, setAuthed] = useState<boolean>(!!getToken());
   const [selected, setSelected] = useState<Song | null>(null);
-  const [initialPos, setInitialPos] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
   // qualquer 401 em qualquer chamada ativa o logout
@@ -26,28 +25,6 @@ export function App() {
     window.addEventListener("spotcin:unauthorized", onUnauthorized);
     return () => window.removeEventListener("spotcin:unauthorized", onUnauthorized);
   }, []);
-
-  // quando escolhe uma faixa, busca a posição salva no Redis
-  useEffect(() => {
-    if (!selected) return;
-    let cancelled = false;
-    setInitialPos(0);
-    api
-      .getPlayback(selected.id)
-      .then((p) => {
-        if (!cancelled) setInitialPos(p?.posicao_seg ?? 0);
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setToast(
-            e instanceof ApiError ? e.message : "Erro ao buscar posição salva.",
-          );
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selected]);
 
   if (!authed) {
     return <AuthForm onAuth={() => setAuthed(true)} />;
@@ -83,8 +60,8 @@ export function App() {
           <HealthIndicator />
           <section className="player-section">
             <Player
+              key={selected?.id}
               song={selected}
-              initialPosition={initialPos}
               onClose={() => setSelected(null)}
             />
           </section>

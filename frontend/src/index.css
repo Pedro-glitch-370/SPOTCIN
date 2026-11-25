@@ -33,5 +33,4 @@ body {
 
 .main { display: flex; flex: 1; }
 
-.muted { color: #888; font-size: 12px; }
 .error { color: #f87171; margin: 8px 0; }
