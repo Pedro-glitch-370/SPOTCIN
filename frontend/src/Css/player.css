@@ -91,3 +91,5 @@
 .close-btn:hover {
   color: #fff;
 }
+
+.warn { color: #f59e0b; font-size: 12px; margin: 8px 0; }

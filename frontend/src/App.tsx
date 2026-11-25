@@ -1,19 +1,31 @@
-import './Css/App.css';
 import HoraAtual from './components/Hora';
-import Navbar from './components/Navbar';
+import { Navbar } from './components/Navbar';
 import Cin from '../src/assets/Cin.png';
 import { useEffect, useState } from 'react';
-import { api } from './services/api';
+import { api, clearToken, getToken } from "./services/api";
 import { ApiError, type Song } from './types/song';
 import { HealthIndicator } from './components/HealthIndicator';
 import { SongList } from './components/SongList';
 import { Player } from './components/Player';
 import { ErrorToast } from './components/ErrorToast';
+import { AuthForm } from './components/AuthForm';
 
 export function App() {
+  const [authed, setAuthed] = useState<boolean>(!!getToken());
   const [selected, setSelected] = useState<Song | null>(null);
   const [initialPos, setInitialPos] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+
+  // valida o token
+  useEffect(() => {
+    if (!authed) return;
+    api.me().catch((e) => {
+      if (e instanceof ApiError && e.kind === "unauthorized") {
+        clearToken();
+        setAuthed(false);
+      }
+    });
+  }, [authed]);
 
   // quando escolhe uma faixa, busca a posição salva no Redis
   useEffect(() => {
@@ -37,9 +49,19 @@ export function App() {
     };
   }, [selected]);
 
+  if (!authed) {
+    return <AuthForm onAuth={() => setAuthed(true)} />;
+  }
+
+  function handleLogout() {
+    clearToken();
+    setAuthed(false);
+    setSelected(null);
+  }
+
   return (
     <div className="app">
-      <Navbar />
+      <Navbar onLogout={handleLogout} />
       
       <article className="painel">
 

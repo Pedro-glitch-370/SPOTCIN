@@ -2,6 +2,7 @@ import { useAudio } from "../hooks/useAudio";
 import { usePlayback } from "../hooks/usePlayback";
 import type { Song } from "../types/song";
 import { api } from "../services/api";
+import { useEffect, useState } from "react";
 
 interface Props {
   song: Song | null;
@@ -17,9 +18,17 @@ function fmt(sec: number): string {
 }
 
 export function Player({ song, initialPosition, onClose }: Props) {
+  const [systemOk, setSystemOk] = useState(true);
+
   const src = song ? api.streamUrl(song.id) : null;
-  const { currentTime, duration, buffered, playing, loading, error, play, pause, seek } =
-    useAudio(src, initialPosition);
+  const { currentTime, duration, buffered, playing, loading, error, play, pause, seek } = useAudio(src, initialPosition);
+  
+  useEffect(() => {
+    const check = () => api.healthReady().then((h) => setSystemOk(h.status === "ok")).catch(() => setSystemOk(false));
+    check();
+    const t = setInterval(check, 15000);
+    return () => clearInterval(t);
+  }, []);
 
   usePlayback(song?.id ?? null, currentTime, playing);
 
@@ -28,7 +37,6 @@ export function Player({ song, initialPosition, onClose }: Props) {
   }
 
   const bufferPct = duration > 0 ? (buffered / duration) * 100 : 0;
-  //const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <div className="player">
@@ -41,6 +49,7 @@ export function Player({ song, initialPosition, onClose }: Props) {
       </div>
 
       {error && <div className="error">{error}</div>}
+      {!systemOk && <div className="warn">Sistema degradado. A reprodução pode falhar.</div>}
 
       <div className="bar-row">
         <span className="bar-label">Reprodução</span>

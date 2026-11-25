@@ -7,6 +7,8 @@ import (
 
 	"gorm.io/gorm"
 
+	"SPOTCIN/backend/internal/middleware"
+	"SPOTCIN/backend/internal/models"
 	"SPOTCIN/backend/internal/services"
 )
 
@@ -49,5 +51,21 @@ func Login(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"token": token})
+	}
+}
+
+func Me(db *gorm.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := middleware.UserIDFromContext(r.Context())
+		if userID == "" {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"erro": "nao_autenticado"})
+			return
+		}
+		var user models.User
+		if err := db.First(&user, "id = ?", userID).Error; err != nil {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"erro": "nao_autenticado"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"id": user.ID, "email": user.Email})
 	}
 }

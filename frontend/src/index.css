@@ -4,6 +4,7 @@
 @import './css/nav.css';
 @import './css/health.css';
 @import './css/player.css';
+@import './css/auth.css';
 
 * { box-sizing: border-box; }
 

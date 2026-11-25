@@ -25,30 +25,22 @@ nav {
     gap: 80px; 
 }
 
-.log_cad {
-    display: flex;
-    align-items: center; /* ISSO AQUI vai alinhar o texto do Login com o botão de Cadastro */
-    gap: 50px; 
-    margin-right: 20px;
+.logout-btn {
+  background: transparent;
+  border: 2px solid #e03939;
+  color: #e03939;
+  padding: 6px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 500;
+  font-family: 'Poppins', sans-serif;
+  transition: 0.2s;
 }
 
-.cadastro {
-    border: solid 2px #e03939;
-    text-align: center;
-    width: 135px;
-    background-color: transparent;
-    color: #e03939;               
-    padding: 2px;   
-    border-radius: 20px;                   
-    cursor: pointer;               
-    display: inline-block;   
-    transition: 0.2s;              
-}
-
-.cadastro:hover {
-    scale: 1.03;
-    background-color: #e03939;       
-    color: #00112b                
+.logout-btn:hover {
+  background: #e03939;
+  color: #00112b;
+  transform: scale(1.03);
 }
 
 nav a, nav p {
