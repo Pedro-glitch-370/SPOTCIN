@@ -24,6 +24,7 @@ export type ApiErrorKind =
   | "range"
   | "unavailable"
   | "validation"
+  | "unauthorized"
   | "unknown";
 
 export class ApiError extends Error {

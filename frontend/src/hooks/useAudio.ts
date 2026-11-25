@@ -9,7 +9,7 @@ export interface AudioState {
   error: string | null;
 }
 
-export function useAudio(src: string | null, initialPosition = 0) {
+export function useAudio(src: string | null) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [state, setState] = useState<AudioState>({
     currentTime: 0,
@@ -24,7 +24,7 @@ export function useAudio(src: string | null, initialPosition = 0) {
   useEffect(() => {
     const el = new Audio();
     el.preload = "auto";
-    audioRef.current = el; // usando audioref pra persistir caso renderize
+    audioRef.current = el;
 
     const onTime = () => {
       const buffered = el.buffered.length > 0
@@ -71,7 +71,7 @@ export function useAudio(src: string | null, initialPosition = 0) {
     };
   }, []);
 
-  // troca de faixa
+  // troca de faixa (sempre carrega do zero)
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
@@ -94,17 +94,7 @@ export function useAudio(src: string | null, initialPosition = 0) {
     el.src = src;
     el.load();
     setState((s) => ({ ...s, error: null, loading: true }));
-
-    // quando os metadados carregarem, faz seek para initialPosition
-    const onLoaded = () => {
-      if (initialPosition > 0 && Number.isFinite(el.duration)) {
-        el.currentTime = Math.min(initialPosition, el.duration - 0.1);
-      }
-      setState((s) => ({ ...s, duration: el.duration || 0 }));
-    };
-    el.addEventListener("loadedmetadata", onLoaded, { once: true });
-    return () => el.removeEventListener("loadedmetadata", onLoaded);
-  }, [src, initialPosition]);
+  }, [src]);
 
   const play = useCallback(() => {
     const el = audioRef.current;
@@ -119,7 +109,8 @@ export function useAudio(src: string | null, initialPosition = 0) {
   const seek = useCallback((seconds: number) => {
     const el = audioRef.current;
     if (!el) return;
-    // <audio> faz Range automaticamente pro novo offset
+    if (seconds < 0) seconds = 0;
+    if (Number.isFinite(el.duration) && seconds > el.duration) seconds = el.duration - 0.1;
     el.currentTime = seconds;
   }, []);
 

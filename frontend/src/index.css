@@ -4,6 +4,7 @@
 @import './css/nav.css';
 @import './css/health.css';
 @import './css/player.css';
+@import './css/auth.css';
 
 * { box-sizing: border-box; }
 
@@ -32,5 +33,4 @@ body {
 
 .main { display: flex; flex: 1; }
 
-.muted { color: #888; font-size: 12px; }
 .error { color: #f87171; margin: 8px 0; }
