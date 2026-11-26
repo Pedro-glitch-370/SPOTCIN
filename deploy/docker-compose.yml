@@ -1,4 +1,30 @@
 services:
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+
+  backend:
+    build:
+      context: ../backend
+    ports:
+      - "8080:8080"
+    env_file:
+      - ../backend/.env
+    volumes:
+      - ../backend/devseed:/app/devseed:ro   # :ro significa somente leitura
+    depends_on:
+      - postgres
+      - redis
+      - garage
+    restart: unless-stopped
+
   postgres:
     image: postgres:16
     container_name: spotcin-postgres
