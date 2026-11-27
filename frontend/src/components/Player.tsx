@@ -68,7 +68,7 @@ export function Player({ song, onClose }: Props) {
         </button>
         <h2>{song.title}</h2>
         <div className="muted">
-          {song.artist} · {song.mime_type}
+          {song.mime_type}
         </div>
 
         {error && <div className="error">{error}</div>}

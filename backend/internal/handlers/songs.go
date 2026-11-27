@@ -100,13 +100,16 @@ func GetSong(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{
+		resp := map[string]any{
 			"id":        song.ID,
 			"title":     song.Title,
-			"artist":    song.Artist,
 			"duration":  song.Duration,
 			"size":      song.Size,
 			"mime_type": song.MimeType,
-		})
+		}
+		if song.ImageURL != "" {
+			resp["image_url"] = song.ImageURL
+		}
+		writeJSON(w, http.StatusOK, resp)
 	}
 }

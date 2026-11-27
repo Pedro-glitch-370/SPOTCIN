@@ -91,7 +91,6 @@ func syncSong(db *gorm.DB, entry os.DirEntry) error {
 			ID:       uuid.NewString(),
 			Path:     relPath,
 			Title:    humanizeName(relPath),
-			Artist:   "Unknown",
 			Size:     info.Size(),
 			ModTime:  info.ModTime(),
 			MimeType: mime,

@@ -7,8 +7,7 @@ type Song struct {
 	ID        string    `gorm:"primaryKey" json:"id"`
 	Path      string    `gorm:"uniqueIndex;not null" json:"path"`
 	Title     string    `json:"title"`
-	Artist    string    `json:"artist"`
-	Album     string    `json:"album,omitempty"`
+	ImageURL  string    `json:"image_url,omitempty"`
 	Duration  int       `json:"duration,omitempty"` // segundos
 	Size      int64     `json:"size"`
 	ModTime   time.Time `json:"mod_time"`

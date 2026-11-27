@@ -49,7 +49,7 @@ export function SongList({ selectedId, onSelect }: Props) {
         >
           <div className="song-title">{s.title}</div>
           <div className="song-meta">
-            {s.artist} · {Math.floor(s.duration)}s
+            {Math.floor(s.duration)}s
           </div>
         </div>
       ))}

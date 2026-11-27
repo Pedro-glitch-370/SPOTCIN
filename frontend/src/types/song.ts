@@ -1,7 +1,7 @@
 export interface Song {
   id: string;
   title: string;
-  artist: string;
+  image_url?: string
   duration: number; // segundos
   size: number;     // bytes
   mime_type: string;
